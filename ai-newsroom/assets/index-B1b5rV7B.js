@@ -179,7 +179,7 @@ Score each translated story 1-10 using BBC news values:
 **STORY COMPLETENESS REQUIREMENTS - ALL MANDATORY, NO EXCEPTIONS:**
 
 - **MANDATORY MINIMUM LENGTH**: Each story MUST be AT LEAST 1500 characters. Stories under 1500 chars are INCOMPLETE and must be expanded.
-- **MANDATORY SENTENCE LENGTH**: Sentences must be between 15-30 words. Too short (<15) sounds choppy. Too long (>30) is hard to follow.
+- **MANDATORY SENTENCE LENGTH DISTRIBUTION**: At least 60% of sentences must be 15-30 words. Average sentence length must be >15 words.
 - **MANDATORY INTERNATIONAL CONTEXT**: Each story MUST include comprehensive background for listeners unfamiliar with local politics/culture. NO ASSUMPTIONS of prior knowledge.
 - **MANDATORY TERM DEFINITIONS**: ALL local terms, acronyms, organizations, and political concepts MUST be defined on first mention. NO UNDEFINED TERMS allowed.
 - **MANDATORY 5 Ws + How**: EVERY story MUST answer Who, What, When, Where, Why, and How. Missing any = INCOMPLETE.
@@ -231,12 +231,13 @@ Score each translated story 1-10 using BBC news values:
 7. **${x.name} Country Attribution**: Every ${x.name} story must mention country name in first sentence.
 8. **Topic Alignment**: Verify stories align with selected topics (${p.join(", ")}). Flag any off-topic stories.
 9. **Timeframe Parameters**: **CRITICAL** - Verify all 8 stories fall within the ${m} window.
-10. **Oral Readability**: Sentences must be between 15-30 words. Too short (<15) sounds choppy. Too long (>30) is hard to follow.
+10. **Oral Readability**: Check sentence length distribution. 60%+ should be 15-30 words. Average >15 words.
 
 **EDITOR COMPLETENESS AUDIT - REJECT IF ANY REQUIREMENT FAILS:**
 
 - **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
-- **REJECT IF SENTENCE <15 OR >30 WORDS**: Sentences outside 15-30 word range = REJECT. Too short sounds choppy, too long is hard to follow.
+- **REJECT IF <60% OF SENTENCES ARE 15-30 WORDS**: At least 60% of sentences must be 15-30 words.
+- **REJECT IF AVERAGE SENTENCE LENGTH <15 WORDS**: Average sentence length must be >15 words.
 - **REJECT IF INTERNATIONAL LISTENER WOULD GOOGLE**: If a listener from another continent wouldn't understand without searching, REJECT.
 - **REJECT IF ANY UNDEFINED TERMS**: Every local reference, term, acronym, organization MUST be defined. Missing any = REJECT.
 - **REJECT IF MISSING 5 Ws + HOW**: Who, What, When, Where, Why, How must ALL be answered. Missing any = REJECT.
@@ -264,7 +265,7 @@ Score each translated story 1-10 using BBC news values:
 2. **No Passive Voice**: Flag and rewrite any "was," "were," "been," "being" constructions
 3. **Present Tense for Current Events**: Use present tense for ongoing/developing stories
 4. **Past Tense for Completed Events**: Use past tense for concluded events
-5. **Oral Readability**: Natural sentence length (15-30 words), simple words, no jargon
+5. **Oral Readability**: Natural sentence length distribution: 60%+ of sentences 15-30 words, average >15 words, simple words, no jargon
 6. **BBC Style**: Objective, authoritative, no editorializing
 7. **Music Cues**: Preserve all [INTRO MUSIC], [OUTRO MUSIC], [STORY STING], [BLOCK TRANSITION STING]
 8. **Transitional Narration**: Maintain bridge text between sections
@@ -542,7 +543,9 @@ final_audio.export("/mnt/okcomputer/output/${g.name.replace(/\s+/g,"_")}_${D.lab
 
    **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
    
-   **REJECT IF SENTENCE <15 OR >30 WORDS**: Sentences outside 15-30 word range = REJECT. Too short sounds choppy, too long is hard to follow.
+   **REJECT IF <60% OF SENTENCES ARE 15-30 WORDS**: At least 60% of sentences must be 15-30 words.
+   
+   **REJECT IF AVERAGE SENTENCE LENGTH <15 WORDS**: Average sentence length must be >15 words.
    
    **REJECT IF INTERNATIONAL LISTENER WOULD GOOGLE**: If a listener from another continent wouldn't understand without searching, REJECT.
    
