@@ -515,11 +515,16 @@ final_audio.export("/mnt/okcomputer/output/${g.name.replace(/\s+/g,"_")}_${D.lab
    - Continent block excludes ${g.name} stories
    - All other BBC standards met
    
-   **IF ANY REQUIREMENT FAILS:** Return to Agent 3 (Writer) for fixes → Back to Agent 2 (Editor) for re-approval
+   **IF ANY REQUIREMENT FAILS:**
+   → Return to **Agent 3 (Writer)** for fixes
+   → **Agent 4 (Fact Checker)** verifies the fixes
+   → **Agent 5 (Researcher - IF NEEDED)** only if Fact Checker finds NEW factual issues
+   → Back to **Agent 2 (Editor)** for re-approval
    
-   **WRITER <-> EDITOR LOOP:** Repeat until ALL requirements pass
+   **LOOP:** Writer → Fact Checker → (Researcher if needed) → Editor
+   **Repeat until Editor confirms ALL requirements pass**
    
-   **ONLY WHEN ALL REQUIREMENTS PASS:** Forward to Agent 6
+   **ONLY WHEN EDITOR APPROVES ALL:** Forward to Agent 6
 
 7. **Agent 6** (Audio Producer) → Final MP3
 
