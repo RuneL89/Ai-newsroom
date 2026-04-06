@@ -523,11 +523,27 @@ final_audio.export("/mnt/okcomputer/output/${g.name.replace(/\s+/g,"_")}_${D.lab
 ## EXECUTION WORKFLOW
 
 1. **Agent 1** (Researcher) → First Draft Script
-2. **Agent 2** (Editor) → Phase 1 BBC CLEARED (or REJECTED)
+2. **Agent 2** (Editor) → Phase 1 BBC CLEARED (or REJECTED → back to Agent 1)
 3. **Agent 3** (Writer) → Phase 2 COMPLETE
 4. **Agent 4** (Fact Checker) → Verification Report
 5. **Agent 5** (Researcher - IF NEEDED) → Fix Issues
-6. **Agent 6** (Audio Producer) → Final MP3
+
+**CRITICAL FINAL APPROVAL GATE:**
+6. **Agent 2** (Editor - FINAL CHECK) → **MUST VERIFY ALL REQUIREMENTS BEFORE AUDIO:**
+   - Story completeness (1500+ characters each)
+   - International audience understanding
+   - No unexplained local references
+   - All political/geographical concepts defined
+   - Continent block excludes ${g.name} stories
+   - All other BBC standards met
+   
+   **IF ANY REQUIREMENT FAILS:** Return to Agent 3 (Writer) for fixes → Back to Agent 2 (Editor) for re-approval
+   
+   **WRITER <-> EDITOR LOOP:** Repeat until ALL requirements pass
+   
+   **ONLY WHEN ALL REQUIREMENTS PASS:** Forward to Agent 6
+
+7. **Agent 6** (Audio Producer) → Final MP3
 
 **NO HUMAN IN THE LOOP** - Agents communicate via structured output only.
 `;return{content:$,metadata:{country:g,continent:x,timeframe:m,topics:p,voice:z,musicSuite:Z,wordCount:$.split(" ").length}}}function N_(){const[g,x]=st.useState(!1);return st.useEffect(()=>{const m=()=>{x(window.innerWidth<768)};return m(),window.addEventListener("resize",m),()=>window.removeEventListener("resize",m)},[]),g}const L_={intro:fs[0],outro:fs[0],storySting:fs[2],blockSting:fs[3]};function O_(){const g=N_(),[x,m]=st.useState(null),[p,z]=st.useState("daily"),[Z,Y]=st.useState(["General News"]),[Q,D]=st.useState(null),[A,$]=st.useState(L_),[_,nt]=st.useState(null),[at,dt]=st.useState(!1),[ut,oe]=st.useState("geo"),rt={geo:st.useRef(null),time:st.useRef(null),topic:st.useRef(null),voice:st.useRef(null),music:st.useRef(null),output:st.useRef(null)},te=!!(x&&Z.length>0&&Q),yt=()=>{if(!te){nm.error("Please complete all configuration steps");return}dt(!0),setTimeout(()=>{const bt=Qc(x.continentCode),mt=M_({country:x,continent:bt,timeframe:p,topics:Z,voice:Q,musicSuite:A});nt(mt),dt(!1),nm.success("Prompt generated successfully!"),g&&setTimeout(()=>{rt.output.current?.scrollIntoView({behavior:"smooth"})},100)},500)},ee=[{id:"geo",label:"Location",icon:Hr,completed:!!x},{id:"time",label:"Time",icon:Zr,completed:!0},{id:"topic",label:"Topics",icon:kc,completed:Z.length>0},{id:"voice",label:"Voice",icon:Gr,completed:!!Q},{id:"music",label:"Music",icon:kr,completed:!0}],fe=bt=>{oe(bt),rt[bt].current?.scrollIntoView({behavior:"smooth",block:"start"})};return v.jsxs("div",{className:"min-h-screen bg-slate-950",children:[v.jsx(Ip,{position:"top-center",theme:"dark"}),v.jsx("header",{className:"bg-slate-900 border-b border-slate-800 sticky top-0 z-50",children:v.jsx("div",{className:"max-w-7xl mx-auto px-4 py-4",children:v.jsxs("div",{className:"flex items-center justify-between",children:[v.jsxs("div",{className:"flex items-center gap-3",children:[v.jsx("div",{className:"bg-gradient-to-br from-blue-500 to-purple-600 p-2.5 rounded-xl",children:v.jsx(em,{className:"w-6 h-6 text-white"})}),v.jsxs("div",{children:[v.jsx("h1",{className:"text-xl font-bold text-white",children:"AI Newsroom"}),v.jsx("p",{className:"text-sm text-slate-400",children:"Configure your automated news podcast"})]})]}),!g&&v.jsx("div",{className:"flex items-center gap-2",children:ee.map((bt,mt)=>{const Kt=bt.icon;return v.jsxs("div",{className:"flex items-center",children:[v.jsxs("button",{onClick:()=>fe(bt.id),className:`
@@ -537,3 +553,4 @@ final_audio.export("/mnt/okcomputer/output/${g.name.replace(/\s+/g,"_")}_${D.lab
                   w-full py-4 px-6 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all
                   ${te&&!at?"bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-blue-500/25":"bg-slate-800 text-slate-500 cursor-not-allowed"}
                 `,children:at?v.jsxs(v.Fragment,{children:[v.jsx("div",{className:"w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"}),"Generating..."]}):v.jsxs(v.Fragment,{children:[v.jsx(em,{className:"w-5 h-5"}),"Generate Podcast Prompt"]})}),v.jsxs("section",{ref:rt.output,id:"output-section",className:"mt-6",children:[v.jsxs("div",{className:"flex items-center gap-3 mb-4",children:[v.jsx(Gc,{className:"w-5 h-5 text-green-400"}),v.jsx("h2",{className:"text-lg font-semibold text-white",children:"Podcast Agent Prompt"})]}),v.jsx(z_,{prompt:_})]})]})})]})}),v.jsx("footer",{className:"border-t border-slate-800 mt-12 py-6",children:v.jsx("div",{className:"max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm",children:v.jsx("p",{children:"AI Newsroom • Configure, Generate, Deploy"})})})]})}qg.createRoot(document.getElementById("root")).render(v.jsx(st.StrictMode,{children:v.jsx(O_,{})}));
+"section",{ref:rt.output,id:"output-section",className:"mt-6",children:[v.jsxs("div",{className:"flex items-center gap-3 mb-4",children:[v.jsx(Gc,{className:"w-5 h-5 text-green-400"}),v.jsx("h2",{className:"text-lg font-semibold text-white",children:"Podcast Agent Prompt"})]}),v.jsx(z_,{prompt:_})]})]})})]})}),v.jsx("footer",{className:"border-t border-slate-800 mt-12 py-6",children:v.jsx("div",{className:"max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm",children:v.jsx("p",{children:"AI Newsroom • Configure, Generate, Deploy"})})})]})}qg.createRoot(document.getElementById("root")).render(v.jsx(st.StrictMode,{children:v.jsx(O_,{})}));
