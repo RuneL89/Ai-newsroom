@@ -507,13 +507,27 @@ final_audio.export("/mnt/okcomputer/output/${g.name.replace(/\s+/g,"_")}_${D.lab
 5. **Agent 5** (Researcher - IF NEEDED) → Fix Issues
 
 **CRITICAL FINAL APPROVAL GATE:**
-6. **Agent 2** (Editor - FINAL CHECK) → **MUST VERIFY ALL REQUIREMENTS BEFORE AUDIO:**
-   - Story completeness (1500+ characters each)
-   - International audience understanding
-   - No unexplained local references
-   - All political/geographical concepts defined
-   - Continent block excludes ${g.name} stories
-   - All other BBC standards met
+6. **Agent 2** (Editor - FINAL CHECK) → **MUST VERIFY ALL REQUIREMENTS BEFORE AUDIO - ALL MANDATORY, NO EXCEPTIONS:**
+
+   **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
+   
+   **REJECT IF INTERNATIONAL LISTENER WOULD GOOGLE**: If a listener from another continent wouldn't understand without searching, REJECT.
+   
+   **REJECT IF ANY UNDEFINED TERMS**: Every local reference, term, acronym, organization MUST be defined. Missing any = REJECT.
+   
+   **REJECT IF MISSING 5 Ws + HOW**: Who, What, When, Where, Why, How must ALL be answered. Missing any = REJECT.
+   
+   **REJECT IF UNDEFINED POLITICAL/GEOGRAPHICAL CONCEPTS**: All concepts must be defined for international audience. Undefined = REJECT.
+   
+   **REJECT IF ASSUMES PRIOR KNOWLEDGE**: Any story assuming listener knows country's internal affairs = REJECT.
+   
+   **REJECT IF ${g.name} STORIES IN ${x.name} BLOCK**: Continent block must ONLY contain other ${x.name} countries.
+   
+   **REJECT IF ${x.name} NEWS LACKS CONTINENT ANGLE**: Stories happening outside ${x.name} WITHOUT ${x.name}-specific angle (impact on ${x.name}, ${x.name} involvement) = REJECT.
+   
+   **REJECT IF ${x.name} NEWS DOESN'T START WITH "In [country]..."**: Must specify which ${x.name} country the story is about.
+   
+   **NO APPROVAL UNTIL ALL REQUIREMENTS PASS. NO EXCEPTIONS.**
    
    **IF ANY REQUIREMENT FAILS:**
    → Return to **Agent 3 (Writer)** for fixes
