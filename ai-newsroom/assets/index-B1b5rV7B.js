@@ -230,7 +230,7 @@ Score each translated story 1-10 using BBC news values:
 7. **${x.name} Country Attribution**: Every ${x.name} story must mention country name in first sentence.
 8. **Topic Alignment**: Verify stories align with selected topics (${p.join(", ")}). Flag any off-topic stories.
 9. **Timeframe Parameters**: **CRITICAL** - Verify all 8 stories fall within the ${m} window.
-10. **Oral Readability**: No sentence >20 words.
+10. **Oral Readability**: Sentences must be between 15-30 words. Too short (<15) sounds choppy. Too long (>30) is hard to follow.
 
 **EDITOR COMPLETENESS AUDIT - REJECT IF ANY REQUIREMENT FAILS:**
 
@@ -262,7 +262,7 @@ Score each translated story 1-10 using BBC news values:
 2. **No Passive Voice**: Flag and rewrite any "was," "were," "been," "being" constructions
 3. **Present Tense for Current Events**: Use present tense for ongoing/developing stories
 4. **Past Tense for Completed Events**: Use past tense for concluded events
-5. **Oral Readability**: Short sentences (max 20 words), simple words, no jargon
+5. **Oral Readability**: Natural sentence length (15-30 words), simple words, no jargon
 6. **BBC Style**: Objective, authoritative, no editorializing
 7. **Music Cues**: Preserve all [INTRO MUSIC], [OUTRO MUSIC], [STORY STING], [BLOCK TRANSITION STING]
 8. **Transitional Narration**: Maintain bridge text between sections
