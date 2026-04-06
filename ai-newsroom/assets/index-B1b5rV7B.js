@@ -376,6 +376,12 @@ Score each translated story 1-10 using BBC news values:
 **Voice ID**: \`${z.voiceId}\`
 **API Call**: \`generate_speech(text=cleanScript, voice='${z.voiceId}')\`
 
+**TTS CONFIGURATION - CRITICAL**:
+- Use **Mandarin Chinese TTS voice**
+- Set **language to English**
+- This combination produces clearer English pronunciation
+- Example: \`generate_speech(text=script, voice='MANDARIN_VOICE_ID', language='en')\`
+
 #### Music Generation (using voice ID \`XB0fDUnXU5powFXDhCwa\` - Bella voice for musical generation)
 
 **STEP 1: GENERATE MUSIC FILES**
