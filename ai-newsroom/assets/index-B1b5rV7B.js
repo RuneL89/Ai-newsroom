@@ -371,17 +371,6 @@ Score each translated story 1-10 using BBC news values:
 **Role**: Audio Production Specialist
 **Task**: Generate all audio files and assemble final podcast
 
-#### Voice Configuration
-**Selected Voice**: ${z.label}
-**Voice ID**: \`${z.voiceId}\`
-**API Call**: \`generate_speech(text=cleanScript, voice='${z.voiceId}')\`
-
-**TTS CONFIGURATION - CRITICAL**:
-- Use **Mandarin Chinese TTS voice**
-- Set **language to English**
-- This combination produces clearer English pronunciation
-- Example: \`generate_speech(text=script, voice='MANDARIN_VOICE_ID', language='en')\`
-
 #### Music Generation (using voice ID \`XB0fDUnXU5powFXDhCwa\` - Bella voice for musical generation)
 
 **STEP 1: GENERATE MUSIC FILES**
@@ -442,20 +431,27 @@ for i in range(6):
 
 **STEP 2: GENERATE NARRATION FILES**
 
+**MANDATORY TTS CONFIGURATION**:
+- Use **Mandarin Chinese TTS voice**
+- Set **language to English**
+- This produces clearer English pronunciation
+
 Generate 13 separate narration files (one per story/segment):
 
 \`\`\`python
 # 5. OPENING NARRATION
 opening = generate_speech(
     text="[Opening script text - "These are today's headlines."]",
-    voice='${z.voiceId}'
+    voice='MANDARIN_VOICE_ID',
+    language='en'
 )
 # Save as: 05_opening.mp3
 
 # 6. HEADLINES NARRATION
 headlines = generate_speech(
     text="[Headlines summary text]",
-    voice='${z.voiceId}'
+    voice='MANDARIN_VOICE_ID',
+    language='en'
 )
 # Save as: 06_headlines.mp3
 
@@ -463,7 +459,8 @@ headlines = generate_speech(
 for i in range(5):
     country_story = generate_speech(
         text="[Country story text]",
-        voice='${z.voiceId}'
+        voice='MANDARIN_VOICE_ID',
+        language='en'
     )
     # Save as: 07a_country_1.mp3 through 07e_country_5.mp3
 
@@ -471,32 +468,42 @@ for i in range(5):
 for i in range(3):
     continent_story = generate_speech(
         text="[Continent story text]",
-        voice='${z.voiceId}'
+        voice='MANDARIN_VOICE_ID',
+        language='en'
     )
     # Save as: 08a_continent_1.mp3 through 08c_continent_3.mp3
 
 # 9a-b. TRANSITION NARRATIONS (2 files)
 trans_1 = generate_speech(
     text="[Transition text - "And now, our top stories in depth..."]",
-    voice='${z.voiceId}'
+    voice='MANDARIN_VOICE_ID',
+    language='en'
 )
 # Save as: 09a_transition_1.mp3
 
 trans_2 = generate_speech(
     text="[Transition text - "And now to our top stories from ${x.name}."]",
-    voice='${z.voiceId}'
+    voice='MANDARIN_VOICE_ID',
+    language='en'
 )
 # Save as: 09b_transition_2.mp3
 
 # 10. SIGN-OFF NARRATION
 signoff = generate_speech(
     text="[Sign-off text]",
-    voice='${z.voiceId}'
+    voice='MANDARIN_VOICE_ID',
+    language='en'
 )
 # Save as: 10_signoff.mp3
 \`\`\`
 
 **STEP 3: ASSEMBLE FINAL COMBINED AUDIO**
+
+**CRITICAL RULE: MUSIC AND NARRATION MUST NEVER OVERLAP**
+
+Music and narration playing simultaneously sounds unprofessional. Always separate them:
+- Music plays FIRST (alone) → FADE OUT → Narration plays SECOND (alone)
+- NO simultaneous playback
 
 Use Python with pydub to combine ALL audio segments into ONE final file:
 
@@ -510,16 +517,14 @@ block_sting_1 = AudioSegment.from_mp3("/mnt/okcomputer/output/03a_block_opening.
 headlines_narration = AudioSegment.from_mp3("/mnt/okcomputer/output/06_headlines.mp3")
 # ... (load all 26 segments)
 
-# Set levels (music -20dB below voice)
-intro_music = intro_music - 20
-outro_music = outro_music - 20
-block_sting_1 = block_sting_1 - 15
-# ... (attenuate all music files)
+# Set levels (music at full volume, voice at full volume)
+# DO NOT attenuate - they play separately, not together
 
-# Assemble in exact order:
-final_audio = intro_music.overlay(opening_narration.fade_in(500))
-final_audio += block_sting_1
-final_audio += headlines_narration
+# Assemble in exact order - SEQUENTIALLY, NOT OVERLAPPED:
+final_audio = intro_music  # Music plays alone
+final_audio += opening_narration  # Then narration plays alone
+final_audio += block_sting_1  # Then sting plays alone
+final_audio += headlines_narration  # Then narration plays alone
 # ... (continue appending all segments in order)
 final_audio += outro_music.overlay(signoff)
 
