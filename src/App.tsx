@@ -493,6 +493,15 @@ ${biasEditorialGuidelines[config.bias]}
                   <BiasSelector value={selectedBias} onChange={setSelectedBias} />
                 </div>
 
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-2">
+                  <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+                    {biasOptions.find(b => b.id === selectedBias)?.label} Perspective
+                  </h4>
+                  <div className="text-xs text-slate-400 whitespace-pre-line leading-relaxed">
+                    {biasAgent1Instructions[selectedBias]}
+                  </div>
+                </div>
+
                 <div className="border-t border-slate-700 pt-3">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
