@@ -1,16 +1,16 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
-import { Mic2, Music, Globe, Clock, FileText, Copy, Check, Radio, Newspaper, Scale } from 'lucide-react';
+import { Mic2, Music, Globe, Clock, FileText, Copy, Check, Radio, Newspaper, Scale, Play, Pause } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { countries, continents } from './data/countries';
 import { timeframes } from './data/timeframes';
 import { topics } from './data/topics';
 import { voices } from './data/voices';
-import { musicSuites } from './data/music';
+import { musicStyles, defaultMusicSuite } from './data/music';
 import { biasOptions, biasAgent1Instructions, biasEditorialGuidelines } from './data/bias';
 import { BiasSelector } from './components/BiasSelector';
-import type { Country, Continent, Timeframe, Topic as TopicType, Voice, MusicSuite, BiasPosition } from './types';
+import type { Country, Continent, Timeframe, Topic as TopicType, Voice, MusicSuite, BiasPosition, MusicStyle } from './types';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -23,10 +23,16 @@ function App() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('daily');
   const [selectedTopics, setSelectedTopics] = useState<TopicType[]>(['General News']);
   const [selectedVoice, setSelectedVoice] = useState<Voice>(voices[0]);
-  const [selectedMusicSuite] = useState<MusicSuite>(musicSuites[0]);
+  const [selectedMusicSuite, setSelectedMusicSuite] = useState<MusicSuite>(defaultMusicSuite);
   const [selectedBias, setSelectedBias] = useState<BiasPosition>('moderate');
   const [includeEditorialSegment, setIncludeEditorialSegment] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Audio preview state
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [playingMusic, setPlayingMusic] = useState<{ category: string; styleId: string } | null>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Generate prompt
   const promptResult = useMemo(() => {
@@ -63,6 +69,67 @@ function App() {
       return [...prev, topic];
     });
   }, []);
+
+  // Voice preview handler
+  const handleVoicePreview = useCallback(async (voice: Voice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    if (playingVoiceId === voice.id) {
+      setPlayingVoiceId(null);
+      return;
+    }
+    try {
+      const audio = new Audio(`./audio/voices/${voice.id}.mp3`);
+      voiceAudioRef.current = audio;
+      audio.addEventListener('ended', () => {
+        setPlayingVoiceId(null);
+        voiceAudioRef.current = null;
+      });
+      audio.addEventListener('error', () => {
+        console.error('Error playing audio preview');
+        setPlayingVoiceId(null);
+        voiceAudioRef.current = null;
+      });
+      setPlayingVoiceId(voice.id);
+      await audio.play();
+    } catch {
+      setPlayingVoiceId(null);
+    }
+  }, [playingVoiceId]);
+
+  // Music preview handler
+  const handleMusicPreview = useCallback(async (category: string, style: MusicStyle, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (musicAudioRef.current) {
+      musicAudioRef.current.pause();
+      musicAudioRef.current = null;
+    }
+    if (playingMusic?.category === category && playingMusic?.styleId === style.id) {
+      setPlayingMusic(null);
+      return;
+    }
+    try {
+      const audioPrefix = category === 'storySting' ? 'story' : category === 'blockSting' ? 'block' : category;
+      const audio = new Audio(`./audio/${audioPrefix}_${style.id}.mp3`);
+      musicAudioRef.current = audio;
+      audio.addEventListener('ended', () => {
+        setPlayingMusic(null);
+        musicAudioRef.current = null;
+      });
+      audio.addEventListener('error', () => {
+        console.error('Error playing audio preview');
+        setPlayingMusic(null);
+        musicAudioRef.current = null;
+      });
+      setPlayingMusic({ category, styleId: style.id });
+      await audio.play();
+    } catch {
+      setPlayingMusic(null);
+    }
+  }, [playingMusic]);
 
   // Copy prompt to clipboard
   const handleCopyPrompt = useCallback(async () => {
@@ -369,36 +436,52 @@ ${biasEditorialGuidelines[config.bias]}
             {/* Voice Selection */}
             <Section icon={Mic2} title="Voice Selection">
               <div className="space-y-2">
-                {voices.map(voice => (
-                  <button
-                    key={voice.id}
-                    onClick={() => setSelectedVoice(voice)}
-                    className={cn(
-                      "w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
-                      selectedVoice.id === voice.id
-                        ? "bg-blue-900/30 border-blue-500"
-                        : "bg-slate-800 border-slate-700 hover:bg-slate-750"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center",
-                      selectedVoice.id === voice.id ? "bg-blue-500/20" : "bg-slate-700"
-                    )}>
-                      <Mic2 className={cn("w-5 h-5", selectedVoice.id === voice.id ? "text-blue-400" : "text-slate-400")} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("font-medium", selectedVoice.id === voice.id ? "text-white" : "text-slate-300")}>
-                          {voice.label}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {voice.gender === 'male' ? '♂' : '♀'} {voice.accent}
-                        </span>
+                {voices.map(voice => {
+                  const isSelected = selectedVoice.id === voice.id;
+                  const isPlaying = playingVoiceId === voice.id;
+                  return (
+                    <button
+                      key={voice.id}
+                      onClick={() => setSelectedVoice(voice)}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                        isSelected
+                          ? "bg-blue-900/30 border-blue-500"
+                          : "bg-slate-800 border-slate-700 hover:bg-slate-750"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                        isSelected ? "bg-blue-500/20" : "bg-slate-700"
+                      )}>
+                        <Mic2 className={cn("w-5 h-5", isSelected ? "text-blue-400" : "text-slate-400")} />
                       </div>
-                      <p className="text-sm text-slate-400">{voice.description}</p>
-                    </div>
-                  </button>
-                ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={cn("font-medium", isSelected ? "text-white" : "text-slate-300")}>
+                            {voice.label}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {voice.gender === 'male' ? '♂' : '♀'} {voice.accent}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-400 truncate">{voice.description}</p>
+                      </div>
+                      <button
+                        onClick={(e) => handleVoicePreview(voice, e)}
+                        className={cn(
+                          "p-2 rounded-full transition-colors flex-shrink-0",
+                          isPlaying
+                            ? "bg-blue-500 text-white"
+                            : "bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white"
+                        )}
+                        title="Preview voice"
+                      >
+                        {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                      </button>
+                    </button>
+                  );
+                })}
               </div>
             </Section>
 
@@ -432,24 +515,48 @@ ${biasEditorialGuidelines[config.bias]}
                   { key: 'outro', label: 'Outro Music' },
                   { key: 'storySting', label: 'Story Sting' },
                   { key: 'blockSting', label: 'Block Transition' }
-                ] as const).map(slot => (
-                  <div key={slot.key} className="bg-slate-800 border border-slate-700 rounded-lg p-3">
-                    <div className="text-sm font-medium text-slate-300 mb-2">{slot.label}</div>
-                    <select
-                      value={selectedMusicSuite[slot.key].id}
-                      onChange={() => {
-                        // Simplified - would need proper state management
-                      }}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
-                    >
-                      <option value="orch_a">Orchestral A</option>
-                      <option value="modern_b">Modern B</option>
-                      <option value="nordic_c">Nordic C</option>
-                      <option value="bbc_d">BBC Style</option>
-                      <option value="contemp_e">Contemporary E</option>
-                    </select>
-                  </div>
-                ))}
+                ] as const).map(slot => {
+                  const selectedStyle = selectedMusicSuite[slot.key];
+                  const isPlaying = playingMusic?.category === slot.key && playingMusic?.styleId === selectedStyle.id;
+                  return (
+                    <div key={slot.key} className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+                      <div className="text-sm font-medium text-slate-300 mb-2">{slot.label}</div>
+                      <div className="flex gap-2">
+                        <select
+                          value={selectedStyle.id}
+                          onChange={(e) => {
+                            const style = musicStyles.find(s => s.id === e.target.value);
+                            if (style) {
+                              setSelectedMusicSuite(prev => ({ ...prev, [slot.key]: style }));
+                            }
+                          }}
+                          className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {musicStyles.map(style => (
+                            <option key={style.id} value={style.id}>
+                              {style.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={(e) => handleMusicPreview(slot.key, selectedStyle, e)}
+                          className={cn(
+                            "px-3 py-2 rounded transition-colors flex items-center gap-1 flex-shrink-0",
+                            isPlaying
+                              ? "bg-blue-500 text-white"
+                              : "bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white"
+                          )}
+                          title="Preview music style"
+                        >
+                          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2 truncate">
+                        {selectedStyle.description} • {selectedStyle.mood}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </Section>
           </div>
