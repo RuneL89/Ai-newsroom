@@ -143,7 +143,7 @@ function App() {
     }
   }, [promptResult]);
 
-  // Generate the agent swarm prompt
+// Generate the agent swarm prompt
   function generateAgentSwarmPrompt(config: {
     country: Country;
     continent: Continent;
@@ -160,9 +160,23 @@ function App() {
       weekly: { label: 'Weekly Review', days: 7 },
       monthly: { label: 'Monthly Roundup', days: 30 }
     }[config.timeframe];
+    const earliestDate = new Date(Date.now() - timeframeConfig.days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
 
     const biasConfig = biasOptions.find(b => b.id === config.bias)!;
     const biasLabel = biasConfig.label;
+
+    const primaryTopic = config.topics[0] || 'General News';
+    const hasGeneralNews = config.topics.includes('General News');
+    const fallbackTopic = hasGeneralNews ? null : 'General News';
+
+    const countrySourcesList = config.country.newsSources.join(', ');
+    const continentSourcesList = config.continent.newsSources.map(s => s.name).join(', ');
+    const countrySourceBullet = config.country.newsSources.map(s => `- ${s}`).join('\n');
+    const continentSourceBullet = config.continent.newsSources.map(s => `- ${s.name} (${s.language})`).join('\n');
+    const countrySearchExamples = config.country.newsSources.map((s, i) => `    ${i === 0 ? '' : '+ '}${i === 0 ? 'local_results' : 'local_results +'}= web_search("${s} [TRANSLATE \"${primaryTopic}\" TO ${config.country.language} FOR SEARCH]")`).join('\n');
+    const fallbackSearchExamples = fallbackTopic ? config.country.newsSources.slice(0, 2).map((s, i) => `    ${i === 0 ? '' : '+ '}${i === 0 ? 'local_results' : 'local_results +'}= web_search("${s} [TRANSLATE \"${fallbackTopic}\" TO ${config.country.language} FOR SEARCH]")`).join('\n') : '';
+    const outputFilename = `${config.country.name.replace(/\s+/g, '_')}_${timeframeConfig.label.replace(/\s+/g, '_')}_${today}.mp3`;
 
     return `# AI NEWSROOM - Agent Swarm Prompt
 ## ${config.country.name} ${timeframeConfig.label} - ${today}
@@ -177,8 +191,8 @@ function App() {
 - **Include Editorial Segment**: ${config.includeEditorialSegment ? 'Yes' : 'No'}
 
 ### News Sources
-- **${config.country.name} sources** (${config.country.language}): ${config.country.newsSources.join(', ')}
-- **${config.continent.name} sources** (English): ${config.continent.newsSources.map(s => s.name).join(', ')}
+- **${config.country.name} sources** (${config.country.language}): ${countrySourcesList}
+- **${config.continent.name} sources** (English): ${continentSourcesList}
 
 ---
 
@@ -194,10 +208,140 @@ Never invent facts. Never omit relevant facts.
 
 ## AGENT SWARM ARCHITECTURE
 
-### AGENT 1: NEWS RESEARCHER
-Search for news from the past ${timeframeConfig.days} day(s) using web_search.
+### AGENT 1: NEWS RESEARCHER & FIRST DRAFT WRITER
+**Role**: Investigative Researcher + Initial Script Writer
+**Tools**: web_search, llm_generate
+**Task**: Research news from local sources in local language, translate to English, and write the first draft script.
 
-### EDITORIAL PERSPECTIVE FOR FIRST DRAFT
+**STEP 0: DETERMINE DATE RANGE**
+
+First, establish the exact date range for news coverage:
+
+\`\`\`python
+from datetime import datetime, timedelta
+
+# Get today's date
+today = datetime.now().strftime("%Y-%m-%d")
+
+# Calculate lookback based on timeframe (${config.timeframe})
+if "${config.timeframe}" == "daily":
+    lookback_days = 1
+elif "${config.timeframe}" == "weekly":
+    lookback_days = 7
+else:  # monthly
+    lookback_days = 30
+
+# Calculate the earliest date for valid news
+earliest_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+
+print(f"Coverage period: {earliest_date} to {today}")
+\`\`\`
+
+**CRITICAL**: All subsequent news searches MUST filter for stories dated between ${earliestDate} and ${today}. Stories dated before ${earliestDate} are NOT valid for this broadcast.
+
+**STEP 1A: SEARCH LOCAL NEWS SOURCES (in ${config.country.language})**
+
+**TRANSLATION INSTRUCTION**: When searching local sources in ${config.country.language}, translate the English topic to ${config.country.language}. For example, "${primaryTopic}" becomes "[TRANSLATE \"${primaryTopic}\" TO ${config.country.language} FOR SEARCH]" in ${config.country.language}.
+
+For **${config.country.name}**, search these local sources **IN ${config.country.language}**:
+${countrySourceBullet}
+
+**Primary Topic Focus**: ${primaryTopic}
+
+\`\`\`python
+# Search using ${config.country.language} keywords for local sources
+# Priority 1: Primary selected topics
+${countrySearchExamples}
+\`\`\`
+
+**IMPORTANT**: These searches MUST be in **${config.country.language}** to get authentic local news.
+
+**STEP 1B: SEARCH CONTINENT NEWS SOURCES**
+
+For **${config.continent.name}**, search these international sources:
+${continentSourceBullet}
+
+\`\`\`python
+# Search continent-level news (English/international sources)
+continent_results = web_search("CNN news today")
+continent_results += web_search("Reuters breaking news")
+continent_results += web_search("AP top stories")
+\`\`\`
+
+**STEP 1C: TOPIC FALLBACK STRATEGY**
+
+If insufficient stories found in primary topics:
+
+\`\`\`python
+# FALLBACK: Expand to ${fallbackTopic || 'other selected topics'} if needed
+if len(local_results) < 5:
+    # Search ${fallbackTopic || 'additional topics'} as fallback
+${fallbackSearchExamples || '    # All selected topics already searched'}
+    
+    # Document fallback usage
+    fallback_used = True
+else:
+    fallback_used = False
+\`\`\`
+
+**STEP 1D: TRANSLATE TO ENGLISH**
+
+Before proceeding, translate all ${config.country.language} content to English:
+
+\`\`\`python
+# For each ${config.country.language} story found:
+for story in local_results:
+    # Translate headline to English
+    story.headline_en = translate(story.headline, from='${config.country.language}', to='en')
+    
+    # Translate article summary/content to English  
+    story.content_en = translate(story.content, from='${config.country.language}', to='en')
+    
+    # Keep original source URL for fact checking
+    story.source_url = story.url
+\`\`\`
+
+**CRITICAL**: All story content MUST be in English before writing the First Draft. The final podcast is in English.
+
+**STEP 2: SCORE AND SELECT STORIES**
+
+Score each translated story 1-10 using BBC news values:
+- **Immediacy**: How recent/timely is the story?
+- **Proximity**: Relevance to ${config.country.name} and ${config.continent.name}
+- **Consequence**: Impact on listeners' lives
+- **Prominence**: Importance of people/places involved
+- **Human Interest**: Emotional connection, relatability
+
+**AUTO-SELECT**: 
+- Top 5 highest-scored **${config.country.name}** stories (from ${config.country.language} sources, translated)
+- Top 3 highest-scored **${config.continent.name}** stories (from English sources)
+
+**Topic Priority**: Selected topics (${config.topics.join(', ')}) > General News (fallback)
+
+**STEP 3: WRITE FIRST DRAFT**
+
+1. Generate initial BBC-standard script using auto-selected stories (all in English)
+2. Include all music cues per configuration
+3. Follow section structure: Opening → Headlines → ${config.country.name} Block → ${config.continent.name} Block${config.includeEditorialSegment ? ' → Editorial Segment' : ''} → Sign-off
+
+**STORY COMPLETENESS REQUIREMENTS - ALL MANDATORY, NO EXCEPTIONS:**
+
+- **MANDATORY MINIMUM LENGTH**: Each story MUST be AT LEAST 1500 characters. Stories under 1500 chars are INCOMPLETE and must be expanded.
+- **MANDATORY SENTENCE LENGTH DISTRIBUTION**: At least 60% of sentences must be 15-30 words. Average sentence length must be >15 words.
+- **MANDATORY INTERNATIONAL CONTEXT**: Each story MUST include comprehensive background for listeners unfamiliar with local politics/culture. NO ASSUMPTIONS of prior knowledge.
+- **MANDATORY TERM DEFINITIONS**: ALL local terms, acronyms, organizations, and political concepts MUST be defined on first mention. NO UNDEFINED TERMS allowed.
+- **MANDATORY 5 Ws + How**: EVERY story MUST answer Who, What, When, Where, Why, and How. Missing any = INCOMPLETE.
+- **MANDATORY HISTORICAL CONTEXT**: If story references past events, historical context MUST be provided. NO EXCEPTIONS.
+- **MANDATORY CONCEPT EXPLANATION**: Country-specific terminology MUST be fully explained. NO UNEXPLAINED CONCEPTS.
+- **MANDATORY ZERO-KNOWLEDGE ASSUMPTION**: Write for listeners with ZERO prior knowledge of the country's political system, geography, or recent history.
+- **MANDATORY CONTINENT-SPECIFIC ANGLE FOR ${config.continent.name} NEWS**: 
+  - If a story is happening OUTSIDE ${config.continent.name}, it MUST have a ${config.continent.name}-specific angle (impact on ${config.continent.name}, ${config.continent.name} involvement, etc.)
+  - ${config.continent.name} news stories MUST start with "In [country within ${config.continent.name}]..."
+  - Stories about other continents WITHOUT a ${config.continent.name} angle are REJECTED
+
+4. Pass to Editor
+
+**EDITORIAL PERSPECTIVE FOR FIRST DRAFT**
 
 When writing the first draft script, frame all facts through ${biasLabel} perspective.
 
@@ -208,16 +352,65 @@ ${biasAgent1Instructions[config.bias]}
 **REMEMBER**: Same facts, different framing. Never invent facts. Never omit relevant facts.
 
 ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT REQUIREMENTS:**
-- Include Editorial Segment after Continent News block
+- Include Editorial Segment after ${config.continent.name} News block
 - Minimum 2500 characters
 - Apply ${biasLabel} perspective MOST prominently (higher intensity than news segments)
 - Analyze themes from both ${config.country.name} and ${config.continent.name} blocks
 - Provide closure and wrap up the podcast` : ''}
 
+**Output Format**:
+\`\`\`
+## FIRST DRAFT SCRIPT
+[Full script with music cues - ALL IN ENGLISH]
+
+## STORY SELECTION REPORT
+- Topic Focus: ${config.topics.join(', ')}
+- Fallback to General News: [Yes/No]
+- ${config.country.name} Stories Selected: [5 stories with scores and sources]
+  * From primary topics: [count]
+  * From fallback (General News): [count]
+  * Source: [local news source] (translated from ${config.country.language})
+  * Original language: ${config.country.language}
+  * Date: YYYY-MM-DD
+- ${config.continent.name} Stories Selected: [3 stories with scores and sources]
+  * Source: [international news source] (English)
+  * Original language: English
+  * Date: YYYY-MM-DD
+- Selection Method: Auto-selected highest scores
+- Translation: All ${config.country.language} content translated to English
+\`\`\`
+
 ---
 
 ### AGENT 2: THE EDITOR
-Review and refine the script for quality and accuracy.
+**Role**: Script Editor & Quality Gate
+**Task**: Edit First Draft for BBC standards and clarity.
+
+**Edit Checklist**:
+1. **Opening Phrasing**: Must end exactly with: "These are today's headlines."
+2. **Music Cues**: Verify [INTRO MUSIC] and [OUTRO MUSIC] are marked with specifications.
+3. **Sting Placement**: [BLOCK TRANSITION STING] between all major sections.
+4. **Story Stings**: [STORY STING] only between individual stories within blocks.
+5. **Transitional Narration**: Confirm presence of bridge text.
+6. **Block Structure**: Verify clear separation.
+7. **${config.continent.name} Country Attribution**: Every ${config.continent.name} story must mention country name in first sentence.
+8. **Topic Alignment**: Verify stories align with selected topics (${config.topics.join(', ')}). Flag any off-topic stories.
+9. **Timeframe Parameters**: **CRITICAL** - Verify all 8 stories fall within the ${config.timeframe} window.
+10. **Oral Readability**: Check sentence length distribution. 60%+ should be 15-30 words. Average >15 words.
+
+**EDITOR COMPLETENESS AUDIT - REJECT IF ANY REQUIREMENT FAILS:**
+
+- **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
+- **REJECT IF <60% OF SENTENCES ARE 15-30 WORDS**: At least 60% of sentences must be 15-30 words.
+- **REJECT IF AVERAGE SENTENCE LENGTH <15 WORDS**: Average sentence length must be >15 words.
+- **REJECT IF INTERNATIONAL LISTENER WOULD GOOGLE**: If a listener from another continent wouldn't understand without searching, REJECT.
+- **REJECT IF ANY UNDEFINED TERMS**: Every local reference, term, acronym, organization MUST be defined. Missing any = REJECT.
+- **REJECT IF MISSING 5 Ws + HOW**: Who, What, When, Where, Why, How must ALL be answered. Missing any = REJECT.
+- **REJECT IF UNDEFINED POLITICAL/GEOGRAPHICAL CONCEPTS**: All concepts must be defined for international audience. Undefined = REJECT.
+- **REJECT IF ASSUMES PRIOR KNOWLEDGE**: Any story assuming listener knows country's internal affairs = REJECT.
+- **REJECT IF ${config.country.name} STORIES IN ${config.continent.name} BLOCK**: Continent block must ONLY contain other ${config.continent.name} countries.
+- **REJECT IF ${config.continent.name} NEWS LACKS CONTINENT ANGLE**: Stories happening outside ${config.continent.name} WITHOUT ${config.continent.name}-specific angle = REJECT.
+- **REJECT IF ${config.continent.name} NEWS DOESN'T START WITH "In [country]..."**: Must specify which ${config.continent.name} country the story is about.
 
 **BIAS VERIFICATION - MANDATORY:**
 
@@ -233,7 +426,7 @@ Verify the script correctly applies **${biasLabel}** perspective:
 
 If the draft reads like a different bias was applied:
 - Return to Agent 1 with specific feedback
-- Example: "This reads Moderate, but Moderate Left was selected. Add more focus on policy impact on workers."
+- Example: "This reads Moderate, but ${biasLabel} was selected. Add more focus on policy impact on workers."
 
 **BIAS CONSISTENCY CHECK:**
 - Does the entire script maintain ${biasLabel} throughout?
@@ -256,10 +449,29 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT VERIFICATION:**
 - Sounds like a separate piece (disconnected from news)
 - Bias intensity is same as or less than news segments` : ''}
 
+**NO APPROVAL UNTIL ALL REQUIREMENTS PASS. NO EXCEPTIONS.**
+
+**Approval Status**: [REJECTED / CONDITIONAL / BBC CLEARED Phase 1]
+
 ---
 
 ### AGENT 3: THE WRITER
-Polish the approved script for clarity, flow, and impact.
+**Role**: Final Script Writer
+**Task**: Produce final broadcast-ready script.
+
+**Input**: Editor's Phase 1 BBC CLEARED script
+**Output**: Final Script (Phase 2 COMPLETE)
+
+**Writing Standards**:
+1. **Active Voice**: Every sentence must use active voice (Subject-Verb-Object)
+2. **No Passive Voice**: Flag and rewrite any "was," "were," "been," "being" constructions
+3. **Present Tense for Current Events**: Use present tense for ongoing/developing stories
+4. **Past Tense for Completed Events**: Use past tense for concluded events
+5. **Oral Readability**: Natural sentence length distribution: 60%+ of sentences 15-30 words, average >15 words, simple words, no jargon
+6. **BBC Style**: Objective, authoritative, no editorializing
+7. **Music Cues**: Preserve all [INTRO MUSIC], [OUTRO MUSIC], [STORY STING], [BLOCK TRANSITION STING]
+8. **Transitional Narration**: Maintain bridge text between sections
+9. **${config.continent.name} Country Attribution**: First sentence of every ${config.continent.name} story MUST name the country
 
 **PHASE 2: POLISH FOR ${biasLabel.toUpperCase()} IMPACT**
 
@@ -278,23 +490,316 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT POLISH:**
 - Maintain connection to reported stories (don't go off-topic)
 - Ensure smooth transition to sign-off` : ''}
 
+**Output Format**:
+\`\`\`
+## FINAL SCRIPT (Phase 2 COMPLETE)
+[Full polished script]
+
+## WRITER'S NOTES
+- Active voice check: [PASS/FAIL]
+- Tense consistency: [PASS/FAIL]
+- Oral readability: [PASS/FAIL]
+- Music cues preserved: [PASS/FAIL]
+- Country attribution verified: [PASS/FAIL]
+- ${biasLabel} framing consistent: [PASS/FAIL]
+\`\`\`
+
 ---
 
 ### AGENT 4: FACT CHECKER
-Verify all claims using web_search.
+**Role**: Verification Specialist
+**Task**: Verify every factual claim against official sources.
+
+**Verification Method:** For each of the 8 stories:
+1. Extract core factual claims (who, what, when, where, numbers, quotes)
+2. Execute web search against **official news sources only**:
+   - ${config.country.name} sources (${config.country.language}): ${countrySourcesList}
+   - ${config.continent.name} sources (English): ${continentSourcesList}
+3. For ${config.country.name} stories: Search in **${config.country.language}** using local sources to verify original reporting
+   - **TRANSLATE search terms**: Convert English topic terms to ${config.country.language} when searching local sources
+4. For ${config.continent.name} stories: Search in **English** using international sources
+5. Verify each claim appears in independent sources
+6. **Timeframe check:** Ensure sources date from **${earliestDate} to ${today}**
+7. **${config.continent.name} Country Check:** Verify the country named in first sentence matches the actual geography
+
+**Output Format:** Create news_fact_check.json:
+\`\`\`json
+{
+  "check_date": "${today}",
+  "coverage_period": "${earliestDate} to ${today}",
+  "script_phase": "Phase 2 COMPLETE",
+  "overall_status": "PASS" | "ISSUES_FOUND",
+  "stories": [
+    {
+      "story_id": 1,
+      "section": "${config.country.name} Local",
+      "headline": "[Exact headline from script]",
+      "original_language": "${config.country.language}",
+      "grade": "FACT CHECKED FULLY CORRECT" | "FACT CHECK PARTIALLY CORRECT" | "FACT CHECK FAILED",
+      "verified_sources": ["${config.country.newsSources[0] || 'Local Source'}", "${config.country.newsSources[1] || 'Local Source'}"],
+      "source_languages": ["${config.country.language}", "English"],
+      "source_dates": ["YYYY-MM-DD", "YYYY-MM-DD"],
+      "unverified_claims": ["Specific claim not found"],
+      "researcher_action": "NONE" | "VERIFY_ADDITIONAL" | "REPLACE_STORY",
+      "notes": "All core facts verified in ${config.country.language} sources for the coverage period"
+    }
+  ]
+}
+\`\`\`
 
 ---
 
-### AGENT 5: AUDIO PRODUCER
-Generate the final podcast using generate_speech with voice ${config.voice.voiceId}.
+### AGENT 5: RESEARCHER (CONDITIONAL)
+**Role**: Fact Recovery Specialist
+**Trigger**: Only activate if Fact Checker reports ISSUES_FOUND
+**Task**: Fix or replace failed stories
+
+**For FACT CHECK FAILED Stories:**
+1. Search for alternative facts that support the same narrative/theme from **${earliestDate} to ${today}** using appropriate language:
+   - For ${config.country.name} stories: Search in **${config.country.language}** using sources: ${countrySourcesList}
+     - **TRANSLATE**: Convert English topic terms to ${config.country.language} for local source searches
+   - For ${config.continent.name} stories: Search in **English** using sources: ${continentSourcesList}
+2. If hallucination is severe, search for a replacement story from **${earliestDate} to ${today}** with same topic area
+3. If replacing a ${config.continent.name} story, ensure new story has clear country attribution
+4. Translate any ${config.country.language} content to English before providing to Writer
+5. Update JSON with replacement details
+
+**For FACT CHECK PARTIALLY CORRECT Stories:**
+1. Execute additional targeted web search for corroborating sources in the appropriate language
+2. If ≥2nd source found: Update grade to FACT CHECKED FULLY CORRECT
+3. If no 2nd source found: Note single-source reporting
+
+**Output Format:**
+\`\`\`json
+{
+  "recovery_actions": [
+    {
+      "story_id": 3,
+      "action": "REPLACED",
+      "new_headline": "[New headline]",
+      "replacement_sources": ["${config.country.newsSources[0] || 'Local Source'}", "${config.continent.newsSources[0]?.name || 'CNN'}"],
+      "source_languages": ["${config.country.language}", "English"],
+      "writer_instructions": "Replace Story 3 with: [new headline and facts in English]"
+    }
+  ]
+}
+\`\`\`
 
 ---
 
-## MUSIC CUES
-- Intro: ${config.musicSuite.intro.name}
-- Outro: ${config.musicSuite.outro.name}
-- Story Sting: ${config.musicSuite.storySting.name}
-- Block Transition: ${config.musicSuite.blockSting.name}
+### AGENT 6: AUDIO PRODUCER
+**Role**: Audio Production Specialist
+**Task**: Generate all audio files and assemble final podcast
+
+#### Music Generation (using voice ID \`XB0fDUnXU5powFXDhCwa\` - Bella voice for musical generation)
+
+**STEP 1: GENERATE MUSIC FILES**
+
+Generate 13 separate music/audio files:
+
+\`\`\`python
+# 1. INTRO MUSIC (${config.musicSuite.intro.duration}, ${config.musicSuite.intro.description}, ${config.musicSuite.intro.mood})
+intro_music = generate_speech(
+    text="[${config.musicSuite.intro.description} - ${config.musicSuite.intro.duration}, ${config.musicSuite.intro.mood}]",
+    voice='XB0fDUnXU5powFXDhCwa'
+)
+# Save as: 01_intro_music.mp3
+
+# 2. OUTRO MUSIC (${config.musicSuite.outro.duration}, ${config.musicSuite.outro.description}, ${config.musicSuite.outro.mood})
+outro_music = generate_speech(
+    text="[${config.musicSuite.outro.description} - ${config.musicSuite.outro.duration}, ${config.musicSuite.outro.mood}]",
+    voice='XB0fDUnXU5powFXDhCwa'
+)
+# Save as: 02_outro_music.mp3
+
+# 3a. BLOCK TRANSITION STING (${config.musicSuite.blockSting.duration})
+block_sting_1 = generate_speech(
+    text="[${config.musicSuite.blockSting.description} - ${config.musicSuite.blockSting.duration}]",
+    voice='XB0fDUnXU5powFXDhCwa'
+)
+# Save as: 03a_block_opening.mp3
+
+# 3b. BLOCK TRANSITION STING (${config.musicSuite.blockSting.duration})
+block_sting_2 = generate_speech(
+    text="[${config.musicSuite.blockSting.description} - ${config.musicSuite.blockSting.duration}]",
+    voice='XB0fDUnXU5powFXDhCwa'
+)
+# Save as: 03b_block_headlines.mp3
+
+# 3c. BLOCK TRANSITION STING (${config.musicSuite.blockSting.duration})
+block_sting_3 = generate_speech(
+    text="[${config.musicSuite.blockSting.description} - ${config.musicSuite.blockSting.duration}]",
+    voice='XB0fDUnXU5powFXDhCwa'
+)
+# Save as: 03c_block_country.mp3
+
+# 3d. BLOCK TRANSITION STING (${config.musicSuite.blockSting.duration})
+block_sting_4 = generate_speech(
+    text="[${config.musicSuite.blockSting.description} - ${config.musicSuite.blockSting.duration}]",
+    voice='XB0fDUnXU5powFXDhCwa'
+)
+# Save as: 03d_block_continent.mp3
+
+# 4a-f. STORY STINGS (6 files, ${config.musicSuite.storySting.duration} each)
+for i in range(6):
+    story_sting = generate_speech(
+        text="[${config.musicSuite.storySting.description} - ${config.musicSuite.storySting.duration}]",
+        voice='XB0fDUnXU5powFXDhCwa'
+    )
+    # Save as: 04a_story_1.mp3 through 04f_story_6.mp3
+\`\`\`
+
+**STEP 2: GENERATE NARRATION FILES**
+
+Generate 13 separate narration files (one per story/segment):
+
+\`\`\`python
+# 5. OPENING NARRATION
+opening = generate_speech(
+    text="[Opening script text - \"These are today's headlines.\"]",
+    voice='${config.voice.voiceId}'
+)
+# Save as: 05_opening.mp3
+
+# 6. HEADLINES NARRATION
+headlines = generate_speech(
+    text="[Headlines summary text]",
+    voice='${config.voice.voiceId}'
+)
+# Save as: 06_headlines.mp3
+
+# 7a-e. COUNTRY STORY NARRATIONS (5 files)
+for i in range(5):
+    country_story = generate_speech(
+        text="[Country story text]",
+        voice='${config.voice.voiceId}'
+    )
+    # Save as: 07a_country_1.mp3 through 07e_country_5.mp3
+
+# 8a-c. CONTINENT STORY NARRATIONS (3 files)
+for i in range(3):
+    continent_story = generate_speech(
+        text="[Continent story text]",
+        voice='${config.voice.voiceId}'
+    )
+    # Save as: 08a_continent_1.mp3 through 08c_continent_3.mp3
+
+# 9a-b. TRANSITION NARRATIONS (2 files)
+trans_1 = generate_speech(
+    text="[Transition text - \"And now, our top stories in depth...\"]",
+    voice='${config.voice.voiceId}'
+)
+# Save as: 09a_transition_1.mp3
+
+trans_2 = generate_speech(
+    text="[Transition text - \"And now to our top stories from ${config.continent.name}.\"]",
+    voice='${config.voice.voiceId}'
+)
+# Save as: 09b_transition_2.mp3
+
+# 10. SIGN-OFF NARRATION
+signoff = generate_speech(
+    text="[Sign-off text]",
+    voice='${config.voice.voiceId}'
+)
+# Save as: 10_signoff.mp3
+\`\`\`
+
+**STEP 3: ASSEMBLE FINAL COMBINED AUDIO**
+
+**CRITICAL RULE: MUSIC AND NARRATION MUST NEVER OVERLAP**
+
+Music and narration playing simultaneously sounds unprofessional. Always separate them:
+- Music plays FIRST (alone) → FADE OUT → Narration plays SECOND (alone)
+- NO simultaneous playback
+
+Use Python with pydub to combine ALL audio segments into ONE final file:
+
+\`\`\`python
+from pydub import AudioSegment
+
+# Load all audio files
+intro_music = AudioSegment.from_mp3("/mnt/okcomputer/output/01_intro_music.mp3")
+opening_narration = AudioSegment.from_mp3("/mnt/okcomputer/output/05_opening.mp3")
+block_sting_1 = AudioSegment.from_mp3("/mnt/okcomputer/output/03a_block_opening.mp3")
+headlines_narration = AudioSegment.from_mp3("/mnt/okcomputer/output/06_headlines.mp3")
+# ... (load all 26 segments)
+
+# Set levels (music at full volume, voice at full volume)
+# DO NOT attenuate - they play separately, not together
+
+# Assemble in exact order - SEQUENTIALLY, NOT OVERLAPPED:
+final_audio = intro_music  # Music plays alone
+final_audio += opening_narration  # Then narration plays alone
+final_audio += block_sting_1  # Then sting plays alone
+final_audio += headlines_narration  # Then narration plays alone
+# ... (continue appending all segments in order)
+final_audio += outro_music.overlay(signoff)
+
+# Add 0.5s silence padding
+silence = AudioSegment.silent(duration=500)
+final_audio = silence + final_audio + silence
+
+# Export final file
+final_audio.export("/mnt/okcomputer/output/${outputFilename}", 
+                   format="mp3", bitrate="320k")
+\`\`\`
+
+**CRITICAL**: The final output MUST be a single combined MP3 file at 320kbps. Do NOT output separate files.
+
+---
+
+## EXECUTION WORKFLOW
+
+1. **Agent 1** (Researcher) → First Draft Script
+2. **Agent 2** (Editor) → Phase 1 BBC CLEARED (or REJECTED → back to Agent 1)
+3. **Agent 3** (Writer) → Phase 2 COMPLETE
+4. **Agent 4** (Fact Checker) → Verification Report
+5. **Agent 5** (Researcher - IF NEEDED) → Fix Issues
+
+**CRITICAL FINAL APPROVAL GATE:**
+6. **Agent 2** (Editor - FINAL CHECK) → **MUST VERIFY ALL REQUIREMENTS BEFORE AUDIO - ALL MANDATORY, NO EXCEPTIONS:**
+
+   **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
+   
+   **REJECT IF <60% OF SENTENCES ARE 15-30 WORDS**: At least 60% of sentences must be 15-30 words.
+   
+   **REJECT IF AVERAGE SENTENCE LENGTH <15 WORDS**: Average sentence length must be >15 words.
+   
+   **REJECT IF INTERNATIONAL LISTENER WOULD GOOGLE**: If a listener from another continent wouldn't understand without searching, REJECT.
+   
+   **REJECT IF ANY UNDEFINED TERMS**: Every local reference, term, acronym, organization MUST be defined. Missing any = REJECT.
+   
+   **REJECT IF MISSING 5 Ws + HOW**: Who, What, When, Where, Why, How must ALL be answered. Missing any = REJECT.
+   
+   **REJECT IF UNDEFINED POLITICAL/GEOGRAPHICAL CONCEPTS**: All concepts must be defined for international audience. Undefined = REJECT.
+   
+   **REJECT IF ASSUMES PRIOR KNOWLEDGE**: Any story assuming listener knows country's internal affairs = REJECT.
+   
+   **REJECT IF ${config.country.name} STORIES IN ${config.continent.name} BLOCK**: Continent block must ONLY contain other ${config.continent.name} countries.
+   
+   **REJECT IF ${config.continent.name} NEWS LACKS CONTINENT ANGLE**: Stories happening outside ${config.continent.name} WITHOUT ${config.continent.name}-specific angle (impact on ${config.continent.name}, ${config.continent.name} involvement) = REJECT.
+   
+   **REJECT IF ${config.continent.name} NEWS DOESN'T START WITH "In [country]..."**: Must specify which ${config.continent.name} country the story is about.
+   
+   **REJECT IF BIAS IS INCORRECT OR INCONSISTENT**: If the draft reads like a different bias was applied: REJECT.
+   
+   **NO APPROVAL UNTIL ALL REQUIREMENTS PASS. NO EXCEPTIONS.**
+   
+   **IF ANY REQUIREMENT FAILS:**
+   → Return to **Agent 3 (Writer)** for fixes
+   → **Agent 4 (Fact Checker)** verifies the fixes
+   → **Agent 5 (Researcher - IF NEEDED)** only if Fact Checker finds NEW factual issues
+   → Back to **Agent 2 (Editor)** for re-approval
+   
+   **LOOP:** Writer → Fact Checker → (Researcher if needed) → Editor
+   **Repeat until Editor confirms ALL requirements pass**
+   
+   **ONLY WHEN EDITOR APPROVES ALL:** Forward to Agent 6
+
+7. **Agent 6** (Audio Producer) → Final MP3
+
+**NO HUMAN IN THE LOOP** - Agents communicate via structured output only.
 
 ${config.includeEditorialSegment ? `---
 
@@ -623,6 +1128,13 @@ ${biasEditorialGuidelines[config.bias]}
               <FileText className="w-5 h-5" />
               {copied ? 'Copied!' : 'Copy Podcast Prompt'}
             </button>
+
+            {/* Character Counter */}
+            <div className="flex justify-end px-1">
+              <span className="text-xs text-slate-500">
+                {promptResult.length.toLocaleString()} characters
+              </span>
+            </div>
 
             {/* Generated Prompt */}
             <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
