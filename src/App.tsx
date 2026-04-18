@@ -480,6 +480,14 @@ ${biasEditorialGuidelines[config.bias]}
                   <span className="text-slate-500">Voice</span>
                   <span className="text-white">{selectedVoice.label}</span>
                 </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-slate-500">Country Sources</span>
+                  <span className="text-white text-right">{selectedCountry.newsSources.join(', ')}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-slate-500">Continent Sources</span>
+                  <span className="text-white text-right">{selectedContinent.newsSources.map(s => s.name).join(', ')}</span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Editorial Perspective</span>
                   <span className="text-white">{biasOptions.find(b => b.id === selectedBias)?.label}</span>
