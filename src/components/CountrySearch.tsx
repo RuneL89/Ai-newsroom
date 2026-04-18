@@ -17,12 +17,14 @@ export function CountrySearch({ value, onChange }: CountrySearchProps) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return countries.slice(0, 15);
-    return countries.filter(
-      c =>
-        c.name.toLowerCase().includes(q) ||
-        c.code.toLowerCase().includes(q)
-    ).slice(0, 20);
+    const list = q
+      ? countries.filter(
+          c =>
+            c.name.toLowerCase().includes(q) ||
+            c.code.toLowerCase().includes(q)
+        )
+      : [...countries];
+    return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [query]);
 
   const handleSelect = useCallback((country: Country) => {
