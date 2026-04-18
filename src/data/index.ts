@@ -3,3 +3,4 @@ export { availableTopics, topicSearchTerms, getTopicSearchTerm, topics } from '.
 export { voices } from './voices';
 export { musicStyles, musicStyleList, defaultMusicSuite, musicSuites } from './music';
 export { timeframes } from './timeframes';
+export { biasOptions, biasAgent1Instructions, biasEditorialGuidelines } from './bias';

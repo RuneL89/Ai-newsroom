@@ -50,6 +50,7 @@ export interface MusicStyle {
 }
 
 export interface MusicSuite {
+  name?: string;
   intro: MusicStyle;
   outro: MusicStyle;
   storySting: MusicStyle;
@@ -57,6 +58,14 @@ export interface MusicSuite {
 }
 
 export type Topic = 'General News' | 'Politics' | 'Economy' | 'Entertainment' | 'Sport' | 'Society' | 'Technology';
+
+export type BiasPosition = 'extreme-left' | 'moderate-left' | 'moderate' | 'moderate-right' | 'extreme-right';
+
+export interface BiasConfig {
+  id: BiasPosition;
+  label: string;
+  shortLabel: string;
+}
 
 export interface GeneratedPrompt {
   content: string;

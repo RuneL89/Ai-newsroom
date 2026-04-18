@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Toaster, toast } from 'sonner';
-import { Mic2, Music, Globe, Clock, FileText, Copy, Check, Radio, Newspaper } from 'lucide-react';
+import { Mic2, Music, Globe, Clock, FileText, Copy, Check, Radio, Newspaper, Scale } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { countries, continents } from './data/countries';
@@ -8,7 +8,9 @@ import { timeframes } from './data/timeframes';
 import { topics } from './data/topics';
 import { voices } from './data/voices';
 import { musicSuites } from './data/music';
-import type { Country, Continent, Timeframe, Topic as TopicType, Voice, MusicSuite } from './types';
+import { biasOptions, biasAgent1Instructions, biasEditorialGuidelines } from './data/bias';
+import { BiasSelector } from './components/BiasSelector';
+import type { Country, Continent, Timeframe, Topic as TopicType, Voice, MusicSuite, BiasPosition } from './types';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -21,7 +23,9 @@ function App() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('daily');
   const [selectedTopics, setSelectedTopics] = useState<TopicType[]>(['General News']);
   const [selectedVoice, setSelectedVoice] = useState<Voice>(voices[0]);
-  const [selectedMusicSuite, setSelectedMusicSuite] = useState<MusicSuite>(musicSuites[0]);
+  const [selectedMusicSuite] = useState<MusicSuite>(musicSuites[0]);
+  const [selectedBias, setSelectedBias] = useState<BiasPosition>('moderate');
+  const [includeEditorialSegment, setIncludeEditorialSegment] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Generate prompt
@@ -32,9 +36,11 @@ function App() {
       timeframe: selectedTimeframe,
       topics: selectedTopics,
       voice: selectedVoice,
-      musicSuite: selectedMusicSuite
+      musicSuite: selectedMusicSuite,
+      bias: selectedBias,
+      includeEditorialSegment
     });
-  }, [selectedCountry, selectedContinent, selectedTimeframe, selectedTopics, selectedVoice, selectedMusicSuite]);
+  }, [selectedCountry, selectedContinent, selectedTimeframe, selectedTopics, selectedVoice, selectedMusicSuite, selectedBias, includeEditorialSegment]);
 
   // Handle country selection
   const handleCountrySelect = useCallback((country: Country) => {
@@ -78,6 +84,8 @@ function App() {
     topics: TopicType[];
     voice: Voice;
     musicSuite: MusicSuite;
+    bias: BiasPosition;
+    includeEditorialSegment: boolean;
   }): string {
     const today = new Date().toISOString().split('T')[0];
     const timeframeConfig = {
@@ -85,6 +93,9 @@ function App() {
       weekly: { label: 'Weekly Review', days: 7 },
       monthly: { label: 'Monthly Roundup', days: 30 }
     }[config.timeframe];
+
+    const biasConfig = biasOptions.find(b => b.id === config.bias)!;
+    const biasLabel = biasConfig.label;
 
     return `# AI NEWSROOM - Agent Swarm Prompt
 ## ${config.country.name} ${timeframeConfig.label} - ${today}
@@ -95,10 +106,22 @@ function App() {
 - **Timeframe**: ${timeframeConfig.label} (past ${timeframeConfig.days} day${timeframeConfig.days > 1 ? 's' : ''})
 - **Topics**: ${config.topics.join(', ')}
 - **Voice**: ${config.voice.label}
+- **Editorial Perspective**: ${biasLabel}
+- **Include Editorial Segment**: ${config.includeEditorialSegment ? 'Yes' : 'No'}
 
 ### News Sources
 - **${config.country.name} sources** (${config.country.language}): ${config.country.newsSources.join(', ')}
 - **${config.continent.name} sources** (English): ${config.continent.newsSources.map(s => s.name).join(', ')}
+
+---
+
+### EDITORIAL PERSPECTIVE
+**Selected Bias**: ${biasLabel}
+
+**CRITICAL INSTRUCTION FOR ALL AGENTS:**
+Every agent MUST maintain ${biasLabel} perspective throughout.
+This affects HOW facts are presented, NOT WHICH facts are reported.
+Never invent facts. Never omit relevant facts.
 
 ---
 
@@ -107,14 +130,93 @@ function App() {
 ### AGENT 1: NEWS RESEARCHER
 Search for news from the past ${timeframeConfig.days} day(s) using web_search.
 
-### AGENT 2: SCRIPT WRITER
-Write a BBC-standard podcast script using the researched stories.
+### EDITORIAL PERSPECTIVE FOR FIRST DRAFT
 
-### AGENT 3: EDITOR
+When writing the first draft script, frame all facts through ${biasLabel} perspective.
+
+**How to Apply ${biasLabel}:**
+
+${biasAgent1Instructions[config.bias]}
+
+**REMEMBER**: Same facts, different framing. Never invent facts. Never omit relevant facts.
+
+${config.includeEditorialSegment ? `**EDITORIAL SEGMENT REQUIREMENTS:**
+- Include Editorial Segment after Continent News block
+- Minimum 2500 characters
+- Apply ${biasLabel} perspective MOST prominently (higher intensity than news segments)
+- Analyze themes from both ${config.country.name} and ${config.continent.name} blocks
+- Provide closure and wrap up the podcast` : ''}
+
+---
+
+### AGENT 2: THE EDITOR
 Review and refine the script for quality and accuracy.
+
+**BIAS VERIFICATION - MANDATORY:**
+
+Verify the script correctly applies **${biasLabel}** perspective:
+
+- [ ] Headlines reflect ${biasLabel} framing (not neutral)
+- [ ] Story order prioritizes ${biasLabel} priorities
+- [ ] Language choices align with ${biasLabel} terminology
+- [ ] Quote selection gives voice to ${biasLabel}-aligned sources
+- [ ] No contradictory framing from opposing perspectives (unless for contrast)
+
+**REJECT IF BIAS IS INCORRECT OR INCONSISTENT:**
+
+If the draft reads like a different bias was applied:
+- Return to Agent 1 with specific feedback
+- Example: "This reads Moderate, but Moderate Left was selected. Add more focus on policy impact on workers."
+
+**BIAS CONSISTENCY CHECK:**
+- Does the entire script maintain ${biasLabel} throughout?
+- Are there sections that suddenly sound neutral or opposite-bias?
+- If inconsistent: REJECT and request rewrite with consistent ${biasLabel} framing
+
+${config.includeEditorialSegment ? `**EDITORIAL SEGMENT VERIFICATION:**
+
+- [ ] Minimum 2500 characters
+- [ ] ${biasLabel} especially prominent (more intense than news segments)
+- [ ] Connects themes from both ${config.country.name} and ${config.continent.name} news
+- [ ] Provides analytical closure (not just summary)
+- [ ] Natural transition to sign-off
+- [ ] Sentence length: 60% between 15-30 words, average >15
+
+**REJECT IF:**
+- Editorial is neutral/balanced when ${biasLabel} was selected
+- Less than 2500 characters
+- Doesn't reference themes from the broadcast
+- Sounds like a separate piece (disconnected from news)
+- Bias intensity is same as or less than news segments` : ''}
+
+---
+
+### AGENT 3: THE WRITER
+Polish the approved script for clarity, flow, and impact.
+
+**PHASE 2: POLISH FOR ${biasLabel.toUpperCase()} IMPACT**
+
+Polish the approved script to maximize ${biasLabel} clarity and impact:
+
+- Strengthen ${biasLabel} framing where weak
+- Ensure consistent ${biasLabel} terminology
+- Verify ${biasLabel} perspective is clear in every segment
+- Maintain oral readability (60% sentences 15-30 words, average >15)
+- Keep all facts accurate and verifiable
+
+${config.includeEditorialSegment ? `**EDITORIAL SEGMENT POLISH:**
+- Strengthen ${biasLabel} framing for maximum impact
+- Ensure thematic connections between stories are clear
+- Verify minimum 2500 characters
+- Maintain connection to reported stories (don't go off-topic)
+- Ensure smooth transition to sign-off` : ''}
+
+---
 
 ### AGENT 4: FACT CHECKER
 Verify all claims using web_search.
+
+---
 
 ### AGENT 5: AUDIO PRODUCER
 Generate the final podcast using generate_speech with voice ${config.voice.voiceId}.
@@ -126,6 +228,46 @@ Generate the final podcast using generate_speech with voice ${config.voice.voice
 - Outro: ${config.musicSuite.outro.name}
 - Story Sting: ${config.musicSuite.storySting.name}
 - Block Transition: ${config.musicSuite.blockSting.name}
+
+${config.includeEditorialSegment ? `---
+
+### EDITORIAL SEGMENT
+
+**Position**: After Continent News block, before Sign-off
+
+**Purpose**: Provide thematic analysis and editorial closure
+
+**Requirements:**
+- **Minimum Length**: 2500 characters
+- **Bias Intensity**: HIGHEST - ${biasLabel} perspective MOST prominent here
+- **Content**: Analyze main themes from ${config.country.name} and ${config.continent.name} news
+- **Style**: Editorial/opinion, not neutral reporting
+
+**Structure:**
+1. **Opening Hook** (2-3 sentences)
+   - Reference 2-3 key stories from the broadcast
+   - Set up the analytical frame
+
+2. **Thematic Analysis** (60% of segment)
+   - Connect dots between different stories
+   - Identify patterns and trends across both blocks
+   - Apply ${biasLabel} interpretive lens
+
+3. **${biasLabel} Perspective** (30% of segment)
+   - Explicitly state the ${biasLabel} viewpoint
+   - Why these stories matter through ${biasLabel} lens
+   - What should be done (policy/cultural implications)
+
+4. **Closing** (10% of segment)
+   - Memorable final thought
+   - Return to big picture
+   - Transition to sign-off
+
+**${biasLabel} Editorial Guidelines:**
+
+${biasEditorialGuidelines[config.bias]}
+
+**CRITICAL**: Editorial must feel like natural conclusion, connected to reported stories. Never invent facts.` : ''}
 `;
   }
 
@@ -260,21 +402,42 @@ Generate the final podcast using generate_speech with voice ${config.voice.voice
               </div>
             </Section>
 
+            {/* Editorial Settings */}
+            <Section icon={Scale} title="Editorial Settings">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-slate-300 mb-3">Editorial Perspective</h3>
+                  <BiasSelector value={selectedBias} onChange={setSelectedBias} />
+                </div>
+
+                <div className="border-t border-slate-700 pt-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeEditorialSegment}
+                      onChange={(e) => setIncludeEditorialSegment(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900"
+                    />
+                    <span className="text-sm text-slate-300">Include Editorial Segment</span>
+                  </label>
+                </div>
+              </div>
+            </Section>
+
             {/* Music Suite */}
             <Section icon={Music} title="Music Suite">
               <div className="space-y-3">
-                {[
+                {([
                   { key: 'intro', label: 'Intro Music' },
                   { key: 'outro', label: 'Outro Music' },
                   { key: 'storySting', label: 'Story Sting' },
                   { key: 'blockSting', label: 'Block Transition' }
-                ].map(slot => (
+                ] as const).map(slot => (
                   <div key={slot.key} className="bg-slate-800 border border-slate-700 rounded-lg p-3">
                     <div className="text-sm font-medium text-slate-300 mb-2">{slot.label}</div>
                     <select
-                      value={selectedMusicSuite[slot.key as keyof MusicSuite].id}
-                      onChange={(e) => {
-                        const style = musicSuites[0][slot.key as keyof MusicSuite];
+                      value={selectedMusicSuite[slot.key].id}
+                      onChange={() => {
                         // Simplified - would need proper state management
                       }}
                       className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm"
@@ -316,6 +479,14 @@ Generate the final podcast using generate_speech with voice ${config.voice.voice
                 <div className="flex justify-between">
                   <span className="text-slate-500">Voice</span>
                   <span className="text-white">{selectedVoice.label}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Editorial Perspective</span>
+                  <span className="text-white">{biasOptions.find(b => b.id === selectedBias)?.label}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Include Editorial Segment</span>
+                  <span className="text-white">{includeEditorialSegment ? 'Yes' : 'No'}</span>
                 </div>
               </div>
             </div>

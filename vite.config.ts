@@ -4,6 +4,9 @@ import path from 'path';
 
 export default defineConfig({
   base: './',
+  build: {
+    outDir: 'ai-newsroom',
+  },
   plugins: [react()],
   resolve: {
     alias: {
