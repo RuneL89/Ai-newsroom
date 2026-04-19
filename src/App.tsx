@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
 import { Mic2, Music, Globe, Clock, FileText, Copy, Check, Radio, Newspaper, Scale, Play, Pause } from 'lucide-react';
 import { cn } from './lib/utils';
-import { countries, continents } from './data/countries';
+import { continents } from './data/countries';
 import { timeframes } from './data/timeframes';
 import { topics } from './data/topics';
 import { voices } from './data/voices';
@@ -15,7 +15,7 @@ import type { Country, Continent, Timeframe, Topic as TopicType, Voice, MusicSui
 
 function App() {
   // Selection states
-  const [selectedCountry, setSelectedCountry] = useState<Country>(countries[0]);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [selectedContinent, setSelectedContinent] = useState<Continent>(Object.values(continents)[0]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('daily');
   const [selectedTopics, setSelectedTopics] = useState<TopicType[]>(['General News']);
@@ -33,6 +33,9 @@ function App() {
 
   // Generate prompt
   const promptResult = useMemo(() => {
+    if (!selectedCountry) {
+      return 'Select a country to generate the podcast prompt...';
+    }
     return generateAgentSwarmPrompt({
       country: selectedCountry,
       continent: selectedContinent,
@@ -873,7 +876,7 @@ ${biasEditorialGuidelines[config.bias]}
                 <div className="flex items-center gap-2 text-sm text-slate-400">
                   <span>Continent: {selectedContinent.name}</span>
                   <span>•</span>
-                  <span>{selectedCountry.newsSources.length} news sources</span>
+                  <span>{selectedCountry ? `${selectedCountry.newsSources.length} news sources` : 'No country selected'}</span>
                 </div>
                 <CountryMap selectedCountry={selectedCountry} selectedContinent={selectedContinent} />
               </div>
@@ -1072,7 +1075,7 @@ ${biasEditorialGuidelines[config.bias]}
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Country</span>
-                  <span className="text-white">{selectedCountry.name}</span>
+                  <span className="text-white">{selectedCountry?.name ?? 'None'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Timeframe</span>
@@ -1088,7 +1091,7 @@ ${biasEditorialGuidelines[config.bias]}
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-slate-500">Country Sources</span>
-                  <span className="text-white text-right">{selectedCountry.newsSources.join(', ')}</span>
+                  <span className="text-white text-right">{selectedCountry ? selectedCountry.newsSources.join(', ') : '—'}</span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-slate-500">Continent Sources</span>

@@ -5,12 +5,12 @@ import { countries, continents } from '../data/countries';
 import type { Country } from '../types';
 
 interface CountrySearchProps {
-  value: Country;
+  value: Country | null;
   onChange: (country: Country) => void;
 }
 
 export function CountrySearch({ value, onChange }: CountrySearchProps) {
-  const [query, setQuery] = useState(value.name);
+  const [query, setQuery] = useState(value?.name ?? '');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,12 +44,12 @@ export function CountrySearch({ value, onChange }: CountrySearchProps) {
     function handleClick(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
-        setQuery(value.name);
+        setQuery(value?.name ?? '');
       }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [value.name]);
+  }, [value?.name]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -80,7 +80,7 @@ export function CountrySearch({ value, onChange }: CountrySearchProps) {
       {isOpen && filtered.length > 0 && (
         <div className="absolute z-[1001] w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-[60vh] overflow-auto">
           {filtered.map(country => {
-            const isSelected = country.code === value.code;
+            const isSelected = value ? country.code === value.code : false;
             const continent = continents[country.continentCode];
             return (
               <button
