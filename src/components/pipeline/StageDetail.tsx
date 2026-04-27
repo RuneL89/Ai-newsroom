@@ -3,12 +3,23 @@ import { cn } from '../../lib/utils';
 import type { StageRecord } from '../../lib/pipelineTypes';
 import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
 
+interface Agent1Metadata {
+  firstDraft?: string;
+  selectionReport?: string;
+  localArticlesFound?: number;
+  continentArticlesFound?: number;
+  sourcesUsed?: string[];
+  fallbackUsed?: boolean;
+}
+
 interface StageDetailProps {
   stage: StageRecord | null;
 }
 
 export default function StageDetail({ stage }: StageDetailProps) {
   const [showReasoning, setShowReasoning] = useState(true);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [showFirstDraft, setShowFirstDraft] = useState(true);
   const [showOutput, setShowOutput] = useState(true);
 
   if (!stage) {
@@ -78,6 +89,50 @@ export default function StageDetail({ stage }: StageDetailProps) {
           {showReasoning && (
             <pre className="p-4 text-xs text-purple-300/80 overflow-auto max-h-[200px] whitespace-pre-wrap bg-slate-950/30">
               {stage.reasoning}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Prompt Panel */}
+      {!!stage.prompt && (
+        <div className="border-b border-slate-700">
+          <button
+            onClick={() => setShowPrompt((p) => !p)}
+            className="w-full flex items-center justify-between px-4 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors"
+          >
+            <span className="text-xs font-medium text-blue-300">Prompt</span>
+            {showPrompt ? (
+              <ChevronUp className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
+          {showPrompt && (
+            <pre className="p-4 text-xs text-blue-300/80 overflow-auto max-h-[300px] whitespace-pre-wrap bg-slate-950/30">
+              {stage.prompt}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* First Draft Panel (Agent 1 only) */}
+      {stage.id === 'agent1' && !!stage.metadata && typeof stage.metadata === 'object' && (stage.metadata as Agent1Metadata).firstDraft && (
+        <div className="border-b border-slate-700">
+          <button
+            onClick={() => setShowFirstDraft((p) => !p)}
+            className="w-full flex items-center justify-between px-4 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors"
+          >
+            <span className="text-xs font-medium text-emerald-300">First Draft</span>
+            {showFirstDraft ? (
+              <ChevronUp className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
+          {showFirstDraft && (
+            <pre className="p-4 text-xs text-emerald-300/80 overflow-auto max-h-[400px] whitespace-pre-wrap font-sans bg-slate-950/30">
+              {(stage.metadata as Agent1Metadata).firstDraft}
             </pre>
           )}
         </div>

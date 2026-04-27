@@ -11,7 +11,7 @@ import { biasOptions, biasAgent1Instructions } from '../data/bias';
 import { BiasSelector } from './BiasSelector';
 import { CountryMap } from './CountryMap';
 import { CountrySearch } from './CountrySearch';
-import { loadApiConfig } from '../lib/apiConfig';
+import { loadApiConfig, loadNewsApiKey } from '../lib/apiConfig';
 import { buildSessionConfig } from '../lib/sessionConfig';
 import type { SessionConfig } from '../lib/sessionConfig';
 import PipelinePanel from './pipeline/PipelinePanel';
@@ -41,10 +41,10 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
 
   const [hasApiKey, setHasApiKey] = useState(true);
 
-  // Check API key on mount
+  // Check API keys on mount
   useEffect(() => {
-    loadApiConfig().then((config) => {
-      setHasApiKey(!!config.apiKey.trim());
+    Promise.all([loadApiConfig(), loadNewsApiKey()]).then(([llmConfig, newsKey]) => {
+      setHasApiKey(!!llmConfig.apiKey.trim() && !!newsKey.trim());
     });
   }, []);
 
@@ -419,7 +419,7 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
             {!hasApiKey && (
               <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/20 border border-amber-500/30 rounded-lg text-amber-300 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>No API key configured. Go to Configure API to add one.</span>
+                <span>No API keys configured. Go to Configure API to add your LLM and News Data keys.</span>
               </div>
             )}
 

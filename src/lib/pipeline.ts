@@ -161,6 +161,7 @@ export class PipelineRunner {
         this.updateStage(stageId, {
           status,
           output: result.draft,
+          prompt: result.prompt,
           metadata: result.metadata,
           completedAt: new Date().toISOString(),
         });

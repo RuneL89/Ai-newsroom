@@ -13,6 +13,7 @@ export interface StageRecord {
   iteration: number;
   reasoning: string;
   output: string;
+  prompt?: string;
   metadata?: unknown;
   startedAt?: string;
   completedAt?: string;
@@ -28,6 +29,7 @@ export interface AgentOutput {
   draft: string;
   reasoning: string;
   metadata?: unknown;
+  prompt?: string;
 }
 
 export type AgentFn = (

@@ -4,7 +4,7 @@
 
 Pick any country on Earth. Select what kind of news you want, how you want it told, and who you want telling it. Then watch a team of six AI agents research local sources, write stories, edit them, fact-check every claim, and polish the final script — all in real time, right on your phone.
 
-No newsroom. No subscription. No backend. Just you, your API key, and a fully autonomous pipeline that turns raw global events into a professional news podcast tailored exactly to your perspective.
+No newsroom. No subscription. No backend. Just you, your API keys, and a fully autonomous pipeline that turns raw global events into a professional news podcast tailored exactly to your perspective.
 
 ---
 
@@ -15,7 +15,7 @@ Imagine waking up in Berlin and wanting to know what's happening in Nairobi — 
 **AI Newsroom makes that happen in under 5 minutes.**
 
 You configure:
-- **Country** — 196 countries with local language and native news sources
+- **Country** — 195 countries with local language and native news sources
 - **Timeframe** — Daily briefing, weekly review, or monthly roundup
 - **Topics** — Up to 3 from politics, economy, sport, technology, crime, and more
 - **Voice** — Professional narrators with distinct accents and personalities
@@ -24,7 +24,7 @@ You configure:
 
 Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 
-1. **Researcher** — Searches local sources in the country's native language, translates findings, and picks the top stories
+1. **Researcher** — Queries NewsData.io for real local news, scores stories by newsworthiness, and writes the first draft script with music cues and editorial framing
 2. **Editor (Phase 1)** — Checks for completeness, clarity, and professional broadcast standards
 3. **Writer** — Polishes the script for active voice, oral readability, and narrative flow
 4. **Fact Checker** — Verifies every claim against independent sources
@@ -32,7 +32,7 @@ Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 6. **Editor (Final)** — Gives the final approval gate before audio production
 7. **Audio Producer** — Generates narration with the selected voice, mixes music stings, and assembles the final MP3
 
-Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking and what it produced. If an editor rejects a story, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
+Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, and what it produced. For the Researcher, the **first draft** is saved as a separate artifact you can inspect before it goes to the Editor. If an editor rejects a story, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
 **This is not a chatbot. This is a production pipeline.**
 
@@ -103,8 +103,8 @@ These are the golden rules. They don't change per session.
 
 The pipeline UI is designed for phones:
 
-- **Horizontal stage strip** — A scrollable row of compact stage cards at the top. Each shows an icon, short name, and status dot. Active stages pulse. Completed stages show green checks. Rejected stages show amber warnings.
-- **Tap to inspect** — Tap any stage to expand its reasoning chain and output below
+- **Vertical stage strip** — A scrollable column of compact stage cards on the left. Each shows an icon, short name, and status dot. Active stages pulse. Completed stages show green checks. Rejected stages show amber warnings.
+- **Tap to inspect** — Tap any stage to expand its reasoning chain, the **full LLM prompt**, the **first draft** (for the Researcher), and output below
 - **Loop counters** — Badges show when a stage has run multiple times (×2, ×3...)
 - **Real-time streaming** — Reasoning tokens stream in as agents think, just like watching a live terminal
 
@@ -120,6 +120,7 @@ The pipeline UI is designed for phones:
 | Build | Vite |
 | Mobile | Capacitor (Android APK) |
 | Storage | `@capacitor/preferences` (Android SharedPreferences) |
+| News API | NewsData.io (real-time news from 206 countries, 89 languages) |
 | LLM API | OpenAI-compatible `/chat/completions` (SSE streaming) |
 | CI/CD | GitHub Actions |
 
@@ -129,11 +130,15 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 
 ### Supported Providers
 
+**LLM Providers:**
 - OpenAI (GPT-4o, etc.)
 - Anthropic (Claude via OpenRouter or direct)
 - Google Gemini
 - OpenRouter (unified access to many models)
 - Local/Custom endpoints (Ollama, llama.cpp, vLLM, etc.)
+
+**News Provider:**
+- NewsData.io — 96,000+ sources, 206 countries, 89 languages. Free tier: 200 requests/day.
 
 ---
 
@@ -150,9 +155,10 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   ├── build.gradle          # Root Gradle build file
 │   └── ...
 ├── src/
-│   ├── agents/               # Agent implementations & stubs
+│   ├── agents/               # Agent implementations
+│   │   ├── agent1.ts         # News Researcher — real NewsData.io + LLM implementation
+│   │   ├── agent1Parse.ts    # Output parser for Agent 1
 │   │   ├── stubs/            # Configurable stub agents for pipeline testing
-│   │   │   ├── agent1Stub.ts
 │   │   │   ├── agent3Stub.ts
 │   │   │   ├── agent5Stub.ts
 │   │   │   ├── gate1Stub.ts
@@ -181,12 +187,14 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   │   ├── topics.ts
 │   │   └── voices.ts
 │   ├── lib/                  # Core logic
-│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming
+│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, NewsData.io key storage
+│   │   ├── newsSearch.ts     # NewsData.io API wrapper with fallback chain
 │   │   ├── pipeline.ts       # Pipeline runner state machine
 │   │   ├── pipelineTypes.ts  # Pipeline type definitions
 │   │   ├── sessionConfig.ts  # SessionConfig builder & formatter
 │   │   └── utils.ts
 │   ├── prompts/
+│   │   ├── agent1.ts         # Agent 1 prompt builder — injects SessionConfig + requirements + bias
 │   │   └── shared/           # Permanent, session-independent prompt building blocks
 │   │       └── completenessRequirements.ts
 │   ├── App.tsx               # Main application component with tab router
@@ -218,10 +226,10 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 
 ## Usage
 
-1. **Configure your API** — Go to Configure API, select your provider, enter your key and model, save and test
+1. **Configure your APIs** — Go to Configure API, add your LLM provider key AND your NewsData.io key, save and test both
 2. **Configure your podcast** — Go to Newsroom 2, pick a country, timeframe, topics, voice, music, and editorial angle
 3. **Run Full Pipeline** — Tap the button and watch the agents work
-4. **Inspect stages** — Tap any stage card to see reasoning and output
+4. **Inspect stages** — Tap any stage card to see reasoning, the full LLM prompt, the first draft, and output
 
 ---
 

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Newspaper } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { loadApiConfig, saveApiConfig, testApiConnection, providerOptions } from '../lib/apiConfig';
+import { loadApiConfig, saveApiConfig, testApiConnection, loadNewsApiKey, saveNewsApiKey, testNewsApiKey, providerOptions } from '../lib/apiConfig';
 import type { ApiConfig, ApiProvider } from '../types';
 
 export default function ConfigureApiScreen() {
@@ -13,16 +13,21 @@ export default function ConfigureApiScreen() {
     model: 'gpt-4o',
   });
   const [showKey, setShowKey] = useState(false);
+  const [newsApiKey, setNewsApiKey] = useState('');
+  const [showNewsKey, setShowNewsKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTestingNews, setIsTestingNews] = useState(false);
+  const [newsTestResult, setNewsTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    loadApiConfig().then((loaded) => {
+    Promise.all([loadApiConfig(), loadNewsApiKey()]).then(([loaded, newsKey]) => {
       if (!cancelled) {
         setConfig(loaded);
+        setNewsApiKey(newsKey);
         setIsLoaded(true);
       }
     });
@@ -42,7 +47,10 @@ export default function ConfigureApiScreen() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await saveApiConfig(config);
+      await Promise.all([
+        saveApiConfig(config),
+        saveNewsApiKey(newsApiKey),
+      ]);
       toast.success('API configuration saved!');
     } catch {
       toast.error('Failed to save configuration');
@@ -64,6 +72,22 @@ export default function ConfigureApiScreen() {
       }
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const handleTestNews = async () => {
+    setIsTestingNews(true);
+    setNewsTestResult(null);
+    try {
+      const result = await testNewsApiKey(newsApiKey);
+      setNewsTestResult(result);
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } finally {
+      setIsTestingNews(false);
     }
   };
 
@@ -161,6 +185,50 @@ export default function ConfigureApiScreen() {
           </p>
         </Section>
 
+        {/* News Data API */}
+        <Section icon={Newspaper} title="News Data API">
+          <div className="relative">
+            <input
+              type={showNewsKey ? 'text' : 'password'}
+              value={newsApiKey}
+              onChange={(e) => setNewsApiKey(e.target.value)}
+              placeholder="pub_..."
+              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+            />
+            <button
+              onClick={() => setShowNewsKey((prev) => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-slate-700 text-slate-400 transition-colors"
+              title={showNewsKey ? 'Hide API key' : 'Show API key'}
+            >
+              {showNewsKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Your NewsData.io API key for fetching news articles. Free tier: 200 requests/day.
+          </p>
+          <button
+            onClick={handleTestNews}
+            disabled={isTestingNews || !newsApiKey.trim()}
+            className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 border border-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isTestingNews ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
+            {isTestingNews ? 'Testing...' : 'Test NewsData.io Connection'}
+          </button>
+          {newsTestResult && (
+            <div
+              className={cn(
+                'mt-2 flex items-center gap-3 px-3 py-2 rounded-lg border text-sm',
+                newsTestResult.success
+                  ? 'bg-green-900/20 border-green-500/30 text-green-300'
+                  : 'bg-red-900/20 border-red-500/30 text-red-300'
+              )}
+            >
+              {newsTestResult.success ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+              <span>{newsTestResult.message}</span>
+            </div>
+          )}
+        </Section>
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <button
@@ -178,7 +246,7 @@ export default function ConfigureApiScreen() {
             className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 border border-slate-600 text-white rounded-lg font-medium hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isTesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <TestTube className="w-5 h-5" />}
-            {isTesting ? 'Testing...' : 'Test Connection'}
+            {isTesting ? 'Testing...' : 'Test LLM Connection'}
           </button>
         </div>
 

@@ -167,6 +167,40 @@ export async function streamLLM(
   }
 }
 
+const NEWSDATA_API_KEY = 'newsdata_api_key';
+
+export async function loadNewsApiKey(): Promise<string> {
+  try {
+    const { value } = await Preferences.get({ key: NEWSDATA_API_KEY });
+    return value ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export async function saveNewsApiKey(key: string): Promise<void> {
+  await Preferences.set({ key: NEWSDATA_API_KEY, value: key });
+}
+
+export async function testNewsApiKey(key: string): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!key.trim()) {
+      return { success: false, message: 'NewsData.io API key is required' };
+    }
+    const response = await fetch(`https://newsdata.io/api/1/sources?apikey=${key.trim()}&country=us`, {
+      method: 'GET',
+    });
+    if (response.ok) {
+      return { success: true, message: 'NewsData.io connection successful!' };
+    }
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData.results?.message || errorData.message || `HTTP ${response.status}`;
+    return { success: false, message: `Connection failed: ${errorMessage}` };
+  } catch (err) {
+    return { success: false, message: `Connection failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 export async function testApiConnection(config: ApiConfig): Promise<{ success: boolean; message: string }> {
   try {
     if (!config.apiKey.trim()) {
