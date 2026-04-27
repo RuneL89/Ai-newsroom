@@ -250,8 +250,11 @@ export class PipelineRunner {
           });
           return 'agent3';
         }
-        return 'COMPLETE';
+        return 'agent6';
       }
+
+      case 'agent6':
+        return 'COMPLETE';
 
       default:
         return 'COMPLETE';

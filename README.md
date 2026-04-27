@@ -22,14 +22,15 @@ You configure:
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
-Then you hit **Run Full Pipeline**. Six AI agents go to work:
+Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 
 1. **Researcher** — Searches local sources in the country's native language, translates findings, and picks the top stories
 2. **Editor (Phase 1)** — Checks for completeness, clarity, and professional broadcast standards
 3. **Writer** — Polishes the script for active voice, oral readability, and narrative flow
 4. **Fact Checker** — Verifies every claim against independent sources
 5. **Researcher (Fix)** — If facts fail, finds replacements and provides repair instructions
-6. **Editor (Final)** — Gives the final approval gate before the script is declared complete
+6. **Editor (Final)** — Gives the final approval gate before audio production
+7. **Audio Producer** — Generates narration with the selected voice, mixes music stings, and assembles the final MP3
 
 Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking and what it produced. If an editor rejects a story, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
@@ -55,6 +56,8 @@ Fact Checker
 Editor (Final)
     ↓ APPROVED          ↓ REJECTED
     ↓                   └──────────→ back to Writer
+Audio Producer
+    ↓
    ✅ COMPLETE
 ```
 

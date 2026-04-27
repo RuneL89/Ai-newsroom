@@ -1,6 +1,6 @@
 import type { SessionConfig } from './sessionConfig';
 
-export type StageId = 'agent1' | 'gate1' | 'agent3' | 'gate2' | 'agent5' | 'gate3';
+export type StageId = 'agent1' | 'gate1' | 'agent3' | 'gate2' | 'agent5' | 'gate3' | 'agent6';
 
 export type StageStatus = 'pending' | 'running' | 'completed' | 'rejected' | 'error';
 
@@ -62,6 +62,7 @@ export interface AgentMap {
   gate2: AgentFn;
   agent5: AgentFn;
   gate3: AgentFn;
+  agent6: AgentFn;
 }
 
 // Structured audit types for Editor gates (Agent 2 Phase 1 & Final)
@@ -92,4 +93,5 @@ export const STAGE_DEFINITIONS: Omit<StageRecord, 'status' | 'iteration' | 'reas
   { id: 'gate2', name: 'Fact Checker', shortName: 'Fact', icon: 'ShieldCheck' },
   { id: 'agent5', name: 'Researcher (Fix)', shortName: 'Fix', icon: 'Wrench' },
   { id: 'gate3', name: 'Editor (Final)', shortName: 'Final', icon: 'CheckCircle' },
+  { id: 'agent6', name: 'Audio Producer', shortName: 'Audio', icon: 'Headphones' },
 ];

@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Wrench,
   CheckCircle,
+  Headphones,
   Loader2,
   AlertTriangle,
   XCircle,
@@ -19,6 +20,7 @@ const iconMap: Record<string, React.ElementType> = {
   ShieldCheck,
   Wrench,
   CheckCircle,
+  Headphones,
 };
 
 interface StageStripProps {

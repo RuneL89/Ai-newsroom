@@ -7,6 +7,7 @@ import { createAgent3Stub } from './stubs/agent3Stub';
 import { createGate2Stub } from './stubs/gate2Stub';
 import { createAgent5Stub } from './stubs/agent5Stub';
 import { createGate3Stub } from './stubs/gate3Stub';
+import { createAgent6Stub } from './stubs/agent6Stub';
 
 export function createAgentMap(stubConfig?: Partial<StubConfig>): AgentMap {
   const config = { ...defaultStubConfig, ...stubConfig };
@@ -18,5 +19,6 @@ export function createAgentMap(stubConfig?: Partial<StubConfig>): AgentMap {
     gate2: createGate2Stub(config),
     agent5: createAgent5Stub(config.delayMs),
     gate3: createGate3Stub(config),
+    agent6: createAgent6Stub(config.delayMs),
   };
 }
