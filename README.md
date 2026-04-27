@@ -42,9 +42,20 @@ Each agent streams its reasoning in real time. You can tap any stage to see exac
 The AI Newsroom pipeline is a state machine that orchestrates six specialized agents. It runs fully automatically, handles rejection loops without limits, and retries failed API calls up to 3 times before aborting.
 
 ```
-Researcher → Editor (Phase 1) → Writer → Fact Checker → [Fixer] → Editor (Final) → ✅
-              ↓ Rejected                    ↓ Issues found
-              └─────────────────────────────┘
+Researcher
+    ↓
+Editor (Phase 1)
+    ↓ Approved          ↓ Rejected
+    ↓                   └──────────→ back to Researcher
+Writer
+    ↓
+Fact Checker
+    ↓ PASS              ↓ ISSUES_FOUND
+    ↓                   └──────────→ Fixer → back to Writer
+Editor (Final)
+    ↓ APPROVED          ↓ REJECTED
+    ↓                   └──────────→ back to Writer
+   ✅ COMPLETE
 ```
 
 **Key behaviors:**
