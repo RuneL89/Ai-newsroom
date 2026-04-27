@@ -146,6 +146,44 @@ Static site deployed to production environment.
 
 ---
 
+## Project Structure
+
+```
+├── ai-newsroom/              # Static assets & public files
+│   ├── assets/               # Image & media assets
+│   ├── audio/                # Podcast audio previews & music samples
+│   ├── index.html            # Static HTML fallback
+│   └── logo.png              # Application logo
+├── src/
+│   ├── components/           # React UI components
+│   │   ├── BiasSelector.tsx  # Editorial bias slider & definition panel
+│   │   ├── CountryMap.tsx    # Interactive Leaflet map
+│   │   └── CountrySearch.tsx # Searchable country dropdown with flags
+│   ├── data/                 # Static data & configuration
+│   │   ├── bias.ts           # Bias options & definitions
+│   │   ├── countries.ts      # 196-country dataset with flags & sources
+│   │   ├── countryBounds.ts  # GeoJSON bounds for map highlighting
+│   │   ├── index.ts          # Data barrel exports
+│   │   ├── music.ts          # Music suite configuration
+│   │   ├── timeframes.ts     # Daily / Weekly / Monthly options
+│   │   ├── topics.ts         # News topic categories
+│   │   └── voices.ts         # Voice actor presets
+│   ├── lib/
+│   │   └── utils.ts          # Utility helpers
+│   ├── App.tsx               # Main application component
+│   ├── index.css             # Global Tailwind styles
+│   ├── main.tsx              # React entry point
+│   └── types.ts              # Shared TypeScript interfaces
+├── index.html                # Vite entry HTML
+├── package.json              # Dependencies & scripts
+├── tailwind.config.js        # Tailwind CSS configuration
+├── tsconfig.json             # TypeScript configuration
+├── tsconfig.node.json        # Vite-specific TS config
+└── vite.config.ts            # Vite build configuration
+```
+
+---
+
 ## GitHub Repository
 
 https://github.com/atavist89-max/Ai-newsroom
