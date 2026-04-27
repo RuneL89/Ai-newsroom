@@ -38,6 +38,40 @@ export const providerOptions: { value: ApiProvider; label: string; defaultModel:
   { value: 'custom', label: 'Custom / Local', defaultModel: '', defaultBaseUrl: '' },
 ];
 
+export async function callLLM(
+  config: ApiConfig,
+  prompt: string
+): Promise<{ content: string; reasoning?: string }> {
+  const url = config.baseUrl.trim()
+    ? `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
+    : 'https://api.openai.com/v1/chat/completions';
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model || 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData.error?.message || `HTTP ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  const data = await response.json();
+  const message = data.choices?.[0]?.message;
+  return {
+    content: message?.content || '',
+    reasoning: message?.reasoning_content,
+  };
+}
+
 export async function testApiConnection(config: ApiConfig): Promise<{ success: boolean; message: string }> {
   try {
     if (!config.apiKey.trim()) {
