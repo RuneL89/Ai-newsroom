@@ -7,7 +7,7 @@ export const continents: Record<ContinentCode, Continent> = {
     bounds: [[36, -25], [71, 45]],
     color: '#3b82f6',
     newsSources: [
-      { name: 'BBC Europe', language: 'English' },
+      { name: 'Professional newscast Europe', language: 'English' },
       { name: 'Politico EU', language: 'English' },
       { name: 'Euronews', language: 'English' },
       { name: 'DW', language: 'English' },
@@ -21,7 +21,7 @@ export const continents: Record<ContinentCode, Continent> = {
     bounds: [[-10, 60], [55, 180]],
     color: '#ef4444',
     newsSources: [
-      { name: 'BBC Asia', language: 'English' },
+      { name: 'Professional newscast Asia', language: 'English' },
       { name: 'Channel News Asia', language: 'English' },
       { name: 'South China Morning Post', language: 'English' },
       { name: 'Nikkei Asia', language: 'English' },
@@ -37,7 +37,7 @@ export const continents: Record<ContinentCode, Continent> = {
       { name: 'Al Jazeera', language: 'English' },
       { name: 'Middle East Eye', language: 'English' },
       { name: 'Reuters Middle East', language: 'English' },
-      { name: 'BBC Middle East', language: 'English' },
+      { name: 'Professional newscast Middle East', language: 'English' },
       { name: 'The National', language: 'English' }
     ]
   },
@@ -61,7 +61,7 @@ export const continents: Record<ContinentCode, Continent> = {
     bounds: [[-55, -85], [15, -35]],
     color: '#f97316',
     newsSources: [
-      { name: 'BBC Latin America', language: 'English' },
+      { name: 'Professional newscast Latin America', language: 'English' },
       { name: 'MercoPress', language: 'English' },
       { name: 'Telesur', language: 'Spanish' },
       { name: 'Infobae', language: 'Spanish' }
@@ -73,7 +73,7 @@ export const continents: Record<ContinentCode, Continent> = {
     bounds: [[-35, -20], [38, 55]],
     color: '#a855f7',
     newsSources: [
-      { name: 'BBC Africa', language: 'English' },
+      { name: 'Professional newscast Africa', language: 'English' },
       { name: 'Africanews', language: 'English' },
       { name: 'Mail & Guardian', language: 'English' },
       { name: 'The Africa Report', language: 'English' }
@@ -136,7 +136,7 @@ export const countries: Country[] = [
   { code: 'SE', name: 'Sweden', continent: 'Europe', continentCode: 'EU', center: [60.13, 18.64], zoom: 5, newsSources: ['Svenska Dagbladet', 'Dagens Nyheter', 'SVT'], language: 'Swedish' },
   { code: 'CH', name: 'Switzerland', continent: 'Europe', continentCode: 'EU', center: [46.82, 8.23], zoom: 7, newsSources: ['NZZ', 'Le Temps', 'SRF'], language: 'German' },
   { code: 'UA', name: 'Ukraine', continent: 'Europe', continentCode: 'EU', center: [48.38, 31.17], zoom: 5, newsSources: ['Kyiv Independent', 'Ukrainska Pravda', 'Hromadske'], language: 'Ukrainian' },
-  { code: 'GB', name: 'United Kingdom', continent: 'Europe', continentCode: 'EU', center: [55.38, -3.44], zoom: 5, newsSources: ['BBC', 'The Guardian', 'The Times'], language: 'English' },
+  { code: 'GB', name: 'United Kingdom', continent: 'Europe', continentCode: 'EU', center: [55.38, -3.44], zoom: 5, newsSources: ['Professional newscast', 'The Guardian', 'The Times'], language: 'English' },
   { code: 'VA', name: 'Vatican City', continent: 'Europe', continentCode: 'EU', center: [41.9, 12.45], zoom: 13, newsSources: ['Vatican News'], language: 'Italian' },
   { code: 'BH', name: 'Bahrain', continent: 'Middle East', continentCode: 'ME', center: [26.07, 50.56], zoom: 9, newsSources: ['Gulf Daily News', 'Bahrain News Agency'], language: 'Arabic' },
   { code: 'IR', name: 'Iran', continent: 'Middle East', continentCode: 'ME', center: [32.43, 53.69], zoom: 5, newsSources: ['Tehran Times', 'Iran International'], language: 'Persian' },
@@ -212,7 +212,7 @@ export const countries: Country[] = [
   { code: 'US', name: 'United States', continent: 'North America', continentCode: 'NA', center: [37.09, -95.71], zoom: 3, newsSources: ['CNN', 'Reuters', 'AP', 'NPR', 'Washington Post'], language: 'English' },
   { code: 'AR', name: 'Argentina', continent: 'South America', continentCode: 'SA', center: [-38.42, -63.62], zoom: 3, newsSources: ['Clarín', 'La Nación', 'Infobae'], language: 'Spanish' },
   { code: 'BO', name: 'Bolivia', continent: 'South America', continentCode: 'SA', center: [-16.29, -63.59], zoom: 5, newsSources: ['El Deber', 'Página Siete'], language: 'Spanish' },
-  { code: 'BR', name: 'Brazil', continent: 'South America', continentCode: 'SA', center: [-14.24, -51.93], zoom: 3, newsSources: ['Folha de S.Paulo', 'O Globo', 'BBC Brasil'], language: 'Portuguese' },
+  { code: 'BR', name: 'Brazil', continent: 'South America', continentCode: 'SA', center: [-14.24, -51.93], zoom: 3, newsSources: ['Folha de S.Paulo', 'O Globo', 'Professional newscast Brasil'], language: 'Portuguese' },
   { code: 'CL', name: 'Chile', continent: 'South America', continentCode: 'SA', center: [-35.68, -71.54], zoom: 3, newsSources: ['El Mercurio', 'La Tercera', 'CNN Chile'], language: 'Spanish' },
   { code: 'CO', name: 'Colombia', continent: 'South America', continentCode: 'SA', center: [4.57, -74.3], zoom: 5, newsSources: ['El Tiempo', 'Semana', 'Blu Radio'], language: 'Spanish' },
   { code: 'EC', name: 'Ecuador', continent: 'South America', continentCode: 'SA', center: [-1.83, -78.18], zoom: 6, newsSources: ['El Comercio', 'El Universo'], language: 'Spanish' },

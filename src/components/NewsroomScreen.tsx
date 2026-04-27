@@ -316,7 +316,7 @@ for story in local_results:
 
 **STEP 2: SCORE AND SELECT STORIES**
 
-Score each translated story 1-10 using BBC news values:
+Score each translated story 1-10 using Professional newscast news values:
 - **Immediacy**: How recent/timely is the story?
 - **Proximity**: Relevance to ${config.country.name} and ${config.continent.name}
 - **Consequence**: Impact on listeners' lives
@@ -331,7 +331,7 @@ Score each translated story 1-10 using BBC news values:
 
 **STEP 3: WRITE FIRST DRAFT**
 
-1. Generate initial BBC-standard script using auto-selected stories (all in English)
+1. Generate initial Professional newscast-standard script using auto-selected stories (all in English)
 2. Include all music cues per configuration
 3. Follow section structure: Opening → Headlines → ${config.country.name} Block → ${config.continent.name} Block${config.includeEditorialSegment ? ' → Editorial Segment' : ''} → Sign-off
 
@@ -395,7 +395,7 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT REQUIREMENTS:**
 
 ### AGENT 2: THE EDITOR
 **Role**: Script Editor & Quality Gate
-**Task**: Edit First Draft for BBC standards and clarity.
+**Task**: Edit First Draft for Professional newscast standards and clarity.
 
 **Edit Checklist**:
 1. **Opening Phrasing**: Must end exactly with: "These are today's headlines."
@@ -462,7 +462,7 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT VERIFICATION:**
 
 **NO APPROVAL UNTIL ALL REQUIREMENTS PASS. NO EXCEPTIONS.**
 
-**Approval Status**: [REJECTED / CONDITIONAL / BBC CLEARED Phase 1]
+**Approval Status**: [REJECTED / CONDITIONAL / Professional newscast CLEARED Phase 1]
 
 ---
 
@@ -470,7 +470,7 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT VERIFICATION:**
 **Role**: Final Script Writer
 **Task**: Produce final broadcast-ready script.
 
-**Input**: Editor's Phase 1 BBC CLEARED script
+**Input**: Editor's Phase 1 Professional newscast CLEARED script
 **Output**: Final Script (Phase 2 COMPLETE)
 
 **Writing Standards**:
@@ -479,7 +479,7 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT VERIFICATION:**
 3. **Present Tense for Current Events**: Use present tense for ongoing/developing stories
 4. **Past Tense for Completed Events**: Use past tense for concluded events
 5. **Oral Readability**: Natural sentence length distribution: 60%+ of sentences 15-30 words, average >15 words, simple words, no jargon
-6. **BBC Style**: Objective, authoritative, no editorializing
+6. **Professional newscast Style**: Objective, authoritative, no editorializing
 7. **Music Cues**: Preserve all [INTRO MUSIC], [OUTRO MUSIC], [STORY STING], [BLOCK TRANSITION STING]
 8. **Transitional Narration**: Maintain bridge text between sections
 9. **${config.continent.name} Country Attribution**: First sentence of every ${config.continent.name} story MUST name the country
@@ -763,7 +763,7 @@ final_audio.export("/mnt/okcomputer/output/${outputFilename}",
 ## EXECUTION WORKFLOW
 
 1. **Agent 1** (Researcher) → First Draft Script
-2. **Agent 2** (Editor) → Phase 1 BBC CLEARED (or REJECTED → back to Agent 1)
+2. **Agent 2** (Editor) → Phase 1 Professional newscast CLEARED (or REJECTED → back to Agent 1)
 3. **Agent 3** (Writer) → Phase 2 COMPLETE
 4. **Agent 4** (Fact Checker) → Verification Report
 5. **Agent 5** (Researcher - IF NEEDED) → Fix Issues

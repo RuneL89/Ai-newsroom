@@ -23,8 +23,8 @@ export const musicStyles: MusicStyle[] = [
     mood: 'modern, subtle'
   },
   {
-    id: 'bbc_d',
-    name: 'BBC Style',
+    id: 'pro_newscast_d',
+    name: 'Professional newscast Style',
     description: 'Classic news transition sting',
     duration: '3s',
     mood: 'authoritative, urgent'
@@ -63,7 +63,7 @@ export const musicSuites: MusicSuite[] = [
     blockSting: musicStyles[3]
   },
   {
-    name: 'BBC Suite',
+    name: 'Professional newscast Suite',
     intro: musicStyles[3],
     outro: musicStyles[3],
     storySting: musicStyles[2],

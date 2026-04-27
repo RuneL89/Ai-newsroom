@@ -10,7 +10,7 @@ export const createAgent1Stub = (delayMs: number = 800): AgentFn => {
       `Scanning ${ctx.sessionConfig.geography.continent.name} sources...`,
       'Selecting top stories by relevance and diversity...',
       'Translating local-language stories to English...',
-      'Writing first draft script with BBC structure...',
+      'Writing first draft script with Professional newscast structure...',
     ];
 
     let reasoning = '';

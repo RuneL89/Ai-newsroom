@@ -92,7 +92,7 @@ Select up to 3 topics:
 
 ### Music Suite
 Customize your podcast's audio identity:
-- **Intro Music** — Orchestral, Modern, Nordic, BBC, Contemporary
+- **Intro Music** — Orchestral, Modern, Nordic, Professional newscast, Contemporary
 - **Outro Music** — Matching intro style
 - **Story Sting** — Short transition between stories
 - **Block Transition** — Between major sections
@@ -148,7 +148,7 @@ The generated prompt orchestrates 6 AI agents working together:
 
 ### Agent 2: The Editor (Quality Gate)
 Runs **twice**: Phase 1 after Agent 1, and Final Check after Agent 4. Uses the same mandatory checklist both times:
-- BBC broadcast standards
+- Professional newscast broadcast standards
 - Story completeness (1500+ characters minimum)
 - International audience understanding
 - Term definitions and context
@@ -159,7 +159,7 @@ Runs **twice**: Phase 1 after Agent 1, and Final Check after Agent 4. Uses the s
 ### Agent 3: The Writer
 - Polishes scripts for active voice
 - Ensures oral readability
-- Maintains BBC style
+- Maintains Professional newscast style
 - Adds transitional narration
 
 ### Agent 4: Fact Checker
