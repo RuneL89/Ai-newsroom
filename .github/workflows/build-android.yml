@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - AI-Newsroom-Mobile
+      - AI-Newsroom-Full-App
   workflow_dispatch:
 
 jobs:
