@@ -64,6 +64,27 @@ export interface AgentMap {
   gate3: AgentFn;
 }
 
+// Structured audit types for Editor gates (Agent 2 Phase 1 & Final)
+export interface RuleResult {
+  rule_name: string;
+  status: 'PASS' | 'FAIL';
+  details?: string;
+  /** Required when status === 'FAIL'. Tells the Writer WHAT to fix and WHY. */
+  rejection_reason?: string;
+}
+
+export interface StoryAudit {
+  story_id: number;
+  rules: RuleResult[];
+}
+
+export interface AuditResult {
+  approval_status: 'APPROVED' | 'REJECTED';
+  stories: StoryAudit[];
+  /** Aggregate guidance built from all rejection_reasons. Passed to Writer on rejection. */
+  rewriter_instructions: string;
+}
+
 export const STAGE_DEFINITIONS: Omit<StageRecord, 'status' | 'iteration' | 'reasoning' | 'output' | 'metadata' | 'startedAt' | 'completedAt'>[] = [
   { id: 'agent1', name: 'Researcher', shortName: 'Research', icon: 'Search' },
   { id: 'gate1', name: 'Editor (Phase 1)', shortName: 'Edit 1', icon: 'ClipboardCheck' },

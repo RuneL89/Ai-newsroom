@@ -105,13 +105,10 @@ export default function StageDetail({ stage }: StageDetailProps) {
         </div>
       )}
 
-      {/* Metadata (for gates) */}
+      {/* Audit Results (for Editor gates) */}
       {!!stage.metadata && (
-        <div className="px-4 py-3 border-t border-slate-700">
-          <span className="text-xs font-medium text-slate-400">Metadata</span>
-          <pre className="mt-1 text-[10px] text-slate-500 overflow-auto max-h-[150px] whitespace-pre-wrap">
-            {JSON.stringify(stage.metadata, null, 2)}
-          </pre>
+        <div className="px-4 py-3 border-t border-slate-700 space-y-3">
+          <AuditMetadata metadata={stage.metadata} />
         </div>
       )}
 
@@ -119,6 +116,112 @@ export default function StageDetail({ stage }: StageDetailProps) {
       {!stage.reasoning && !stage.output && stage.status === 'pending' && (
         <div className="p-4 text-sm text-slate-500 text-center">
           Waiting to start...
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface RuleItem {
+  rule_name: string;
+  status: 'PASS' | 'FAIL';
+  details?: string;
+  rejection_reason?: string;
+}
+
+interface StoryItem {
+  story_id: number;
+  rules: RuleItem[];
+}
+
+interface AuditMeta {
+  approval_status?: string;
+  rewriter_instructions?: string;
+  stories?: StoryItem[];
+}
+
+function AuditMetadata({ metadata }: { metadata: unknown }) {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const m = metadata as AuditMeta;
+
+  const approvalStatus = m.approval_status;
+  const rewriterInstructions = m.rewriter_instructions;
+  const stories = m.stories;
+
+  return (
+    <div className="space-y-3">
+      {/* Approval status */}
+      {approvalStatus && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-400">Approval:</span>
+          <span
+            className={cn(
+              'text-xs px-2 py-0.5 rounded-full font-medium',
+              approvalStatus === 'APPROVED'
+                ? 'bg-green-900/50 text-green-300'
+                : 'bg-amber-900/50 text-amber-300'
+            )}
+          >
+            {approvalStatus}
+          </span>
+        </div>
+      )}
+
+      {/* Rule breakdown per story */}
+      {stories && stories.length > 0 && (
+        <div className="space-y-2">
+          <span className="text-xs font-medium text-slate-400">Audit Breakdown</span>
+          {stories.map((story) => {
+            const rules = story.rules || [];
+            return (
+              <div key={story.story_id} className="space-y-1">
+                {rules.map((rule, idx) => {
+                  const isFail = rule.status === 'FAIL';
+                  const rejectionReason = rule.rejection_reason;
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        'rounded px-2 py-1.5 text-[11px]',
+                        isFail
+                          ? 'bg-amber-900/20 border border-amber-500/20'
+                          : 'bg-green-900/10 border border-green-500/10'
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            'font-medium',
+                            isFail ? 'text-amber-300' : 'text-green-300'
+                          )}
+                        >
+                          {rule.status === 'PASS' ? '✓' : '✗'} {rule.rule_name}
+                        </span>
+                        {rule.details && (
+                          <span className="text-slate-500">— {rule.details}</span>
+                        )}
+                      </div>
+                      {isFail && rejectionReason && (
+                        <p className="mt-1 text-amber-200/80 leading-relaxed pl-4 border-l-2 border-amber-500/30">
+                          {rejectionReason}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Rewriter instructions */}
+      {rewriterInstructions && (
+        <div className="bg-slate-800/50 rounded p-3 border border-slate-700">
+          <span className="text-xs font-medium text-slate-400">Rewriter Instructions</span>
+          <pre className="mt-1 text-[11px] text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">
+            {rewriterInstructions}
+          </pre>
         </div>
       )}
     </div>
