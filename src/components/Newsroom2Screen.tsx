@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
 import { Mic2, Music, Globe, Clock, Check, Radio, Newspaper, Scale, Play, Pause, Loader2, Zap, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -11,7 +11,8 @@ import { biasOptions, biasAgent1Instructions } from '../data/bias';
 import { BiasSelector } from './BiasSelector';
 import { CountryMap } from './CountryMap';
 import { CountrySearch } from './CountrySearch';
-import { loadApiConfig, callLLM } from '../lib/apiConfig';
+import { loadApiConfig, streamLLM } from '../lib/apiConfig';
+import { buildConfigurationPrompt } from '../prompts/configurationPrompt';
 import type { Country, Continent, Timeframe, Topic as TopicType, Voice, MusicSuite, BiasPosition, MusicStyle } from '../types';
 
 export default function Newsroom2Screen() {
@@ -33,10 +34,11 @@ export default function Newsroom2Screen() {
 
   // LLM output state (new)
   const [llmOutput, setLlmOutput] = useState('');
-  const [llmReasoning, setLlmReasoning] = useState<string | undefined>(undefined);
+  const [llmReasoning, setLlmReasoning] = useState('');
+  const [hasReasoning, setHasReasoning] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  const [showReasoning, setShowReasoning] = useState(true);
+  const [showReasoning, setShowReasoning] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true);
 
   // Check API key on mount
@@ -46,56 +48,7 @@ export default function Newsroom2Screen() {
     });
   }, []);
 
-  // Generate the prompt for the LLM
-  const agentPrompt = useMemo(() => {
-    if (!selectedCountry) {
-      return '';
-    }
-    const today = new Date().toISOString().split('T')[0];
-    const timeframeConfig = {
-      daily: { label: 'Daily Briefing', days: 1 },
-      weekly: { label: 'Weekly Review', days: 7 },
-      monthly: { label: 'Monthly Roundup', days: 30 }
-    }[selectedTimeframe];
-    const earliestDate = new Date(Date.now() - timeframeConfig.days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const biasLabel = biasOptions.find(b => b.id === selectedBias)!.label;
 
-    return `**STEP 0: DETERMINE DATE RANGE**
-
-First, establish the exact date range for news coverage:
-
-\`\`\`python
-from datetime import datetime, timedelta
-
-# Get today's date
-today = datetime.now().strftime("%Y-%m-%d")
-
-# Calculate lookback based on timeframe (${selectedTimeframe})
-if "${selectedTimeframe}" == "daily":
-    lookback_days = 1
-elif "${selectedTimeframe}" == "weekly":
-    lookback_days = 7
-else:  # monthly
-    lookback_days = 30
-
-# Calculate the earliest date for valid news
-earliest_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
-
-print(f"Coverage period: {earliest_date} to {today}")
-\`\`\`
-
-Configuration
-- **Country**: ${selectedCountry.name} 
-- **Local Language**: ${selectedCountry.language} 
-- **Continent**: ${selectedContinent.name} 
-- **Timeframe**: ${timeframeConfig.label} (past ${timeframeConfig.days} day${timeframeConfig.days > 1 ? 's' : ''}) — Coverage period: ${earliestDate} to ${today}
-- **Topics**: ${selectedTopics.join(', ')} 
-- **Voice**: ${selectedVoice.label} 
-- **Editorial Perspective**: ${biasLabel} 
-- **Include Editorial Segment**: ${includeEditorialSegment ? 'Yes' : 'No'}
-
-Please acknowledge this configuration and summarize the date range and selected parameters.`;
-  }, [selectedCountry, selectedContinent, selectedTimeframe, selectedTopics, selectedVoice, selectedBias, includeEditorialSegment]);
 
   // Handle country selection
   const handleCountrySelect = useCallback((country: Country) => {
@@ -182,7 +135,7 @@ Please acknowledge this configuration and summarize the date range and selected 
 
   // Run Agent handler
   const handleRunAgent = useCallback(async () => {
-    if (!selectedCountry || !agentPrompt) {
+    if (!selectedCountry) {
       toast.error('Please select a country first');
       return;
     }
@@ -190,7 +143,9 @@ Please acknowledge this configuration and summarize the date range and selected 
     setIsRunning(true);
     setRunError(null);
     setLlmOutput('');
-    setLlmReasoning(undefined);
+    setLlmReasoning('');
+    setHasReasoning(false);
+    setShowReasoning(false);
 
     try {
       const apiConfig = await loadApiConfig();
@@ -201,18 +156,41 @@ Please acknowledge this configuration and summarize the date range and selected 
         return;
       }
 
-      const result = await callLLM(apiConfig, agentPrompt);
-      setLlmOutput(result.content);
-      setLlmReasoning(result.reasoning);
-      toast.success('Agent completed!');
+      const prompt = buildConfigurationPrompt({
+        country: selectedCountry,
+        continent: selectedContinent,
+        timeframe: selectedTimeframe,
+        topics: selectedTopics,
+        voice: selectedVoice,
+        bias: selectedBias,
+        includeEditorialSegment,
+      });
+
+      await streamLLM(apiConfig, prompt, {
+        onReasoningChunk: (chunk) => {
+          setLlmReasoning((prev) => prev + chunk);
+          setHasReasoning(true);
+        },
+        onContentChunk: (chunk) => {
+          setLlmOutput((prev) => prev + chunk);
+        },
+        onError: (err) => {
+          setRunError(err.message);
+          toast.error(`Agent failed: ${err.message}`);
+          setIsRunning(false);
+        },
+        onDone: () => {
+          setIsRunning(false);
+          toast.success('Agent completed!');
+        },
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setRunError(message);
       toast.error(`Agent failed: ${message}`);
-    } finally {
       setIsRunning(false);
     }
-  }, [selectedCountry, agentPrompt]);
+  }, [selectedCountry, selectedContinent, selectedTimeframe, selectedTopics, selectedVoice, selectedBias, includeEditorialSegment]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -520,7 +498,7 @@ Please acknowledge this configuration and summarize the date range and selected 
               </div>
 
               {/* Reasoning Chain */}
-              {llmReasoning && (
+              {hasReasoning && (
                 <div className="border-b border-slate-700">
                   <button
                     onClick={() => setShowReasoning(prev => !prev)}

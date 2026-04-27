@@ -72,6 +72,101 @@ export async function callLLM(
   };
 }
 
+export interface StreamCallbacks {
+  onReasoningChunk?: (chunk: string) => void;
+  onContentChunk?: (chunk: string) => void;
+  onError?: (error: Error) => void;
+  onDone?: () => void;
+}
+
+export async function streamLLM(
+  config: ApiConfig,
+  prompt: string,
+  callbacks: StreamCallbacks
+): Promise<void> {
+  const url = config.baseUrl.trim()
+    ? `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
+    : 'https://api.openai.com/v1/chat/completions';
+
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model || 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || `HTTP ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') {
+          callbacks.onDone?.();
+          return;
+        }
+
+        try {
+          const chunk = JSON.parse(data);
+          const delta = chunk.choices?.[0]?.delta;
+          if (!delta) continue;
+
+          if (delta.reasoning_content) {
+            callbacks.onReasoningChunk?.(delta.reasoning_content);
+          }
+          if (delta.content) {
+            callbacks.onContentChunk?.(delta.content);
+          }
+
+          if (chunk.choices?.[0]?.finish_reason) {
+            callbacks.onDone?.();
+            return;
+          }
+        } catch {
+          // ignore malformed JSON chunks
+        }
+      }
+    }
+
+    callbacks.onDone?.();
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    callbacks.onError?.(error);
+  } finally {
+    reader?.cancel().catch(() => {});
+  }
+}
+
 export async function testApiConnection(config: ApiConfig): Promise<{ success: boolean; message: string }> {
   try {
     if (!config.apiKey.trim()) {
