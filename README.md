@@ -23,10 +23,10 @@ Configure your podcast and run the LLM agent:
 - **Music Suite** — Customize intro, outro, story stings, and block transitions with audio previews
 - **Editorial Settings** — 5-position bias slider (Extreme Left → Extreme Right) with live definition panel
 - **Run Agent** — Sends your full configuration to the connected LLM
-- **Agent Output** — Scrollable window showing the LLM response in real time
-- **Reasoning Chain** — Collapsible section that appears when the model returns reasoning (e.g., DeepSeek R1, o1)
+- **Agent Output** — Scrollable window showing the LLM response token-by-token in real time via SSE streaming
+- **Reasoning Chain** — Auto-appears when the model returns reasoning (e.g., DeepSeek R1), stays collapsed until you click to expand
 
-The prompt sent to the LLM includes a Python date-range calculation and your complete configuration: country, local language, continent, timeframe, topics, voice, editorial perspective, and editorial segment toggle.
+The **Configuration Prompt** is stored in a dedicated file (`src/prompts/configurationPrompt.ts`) for easy editing. It includes a Python date-range calculation and your complete configuration: country, local language, country news sources, continent, continent news sources, timeframe, topics, voice, editorial perspective, and editorial segment toggle.
 
 ### Configure API
 
@@ -243,8 +243,10 @@ Every story must meet these criteria:
 │   │   ├── topics.ts         # News topic categories
 │   │   └── voices.ts         # Voice actor presets
 │   ├── lib/
-│   │   ├── apiConfig.ts      # API config persistence & LLM calls
+│   │   ├── apiConfig.ts      # API config persistence, LLM calls & SSE streaming
 │   │   └── utils.ts          # Utility helpers
+│   ├── prompts/
+│   │   └── configurationPrompt.ts  # Editable LLM prompt template
 │   ├── App.tsx               # Main application component with tab router
 │   ├── index.css             # Global Tailwind styles
 │   ├── main.tsx              # React entry point
@@ -271,15 +273,17 @@ https://github.com/atavist89-max/Ai-newsroom
 ## Changelog
 
 ### Current Release
+- **Real-Time SSE Streaming** — LLM response streams token-by-token via Server-Sent Events; no more waiting for the full response
+- **Editable Configuration Prompt** — Prompt template lives in `src/prompts/configurationPrompt.ts` for easy editing
 - **Live LLM Integration** — Newsroom screen connects directly to your configured LLM provider
 - **Run Agent** — One-tap agent execution with loading and error states
-- **Agent Output Window** — Real-time LLM response display
-- **Reasoning Chain** — Collapsible reasoning display for supported models
+- **Agent Output Window** — Real-time LLM response display as tokens arrive
+- **Reasoning Chain** — Auto-appears when the model returns reasoning, stays collapsed until you expand it
 - **Configure API** — Provider selector, API key, base URL, model input with persistent storage
 - **Tab Navigation** — Full-width top tabs switching between Newsroom and Configure API
 - **Native Persistence** — API credentials stored in Android SharedPreferences via Capacitor Preferences
 - **OpenAI-Compatible API** — Universal chat completions format for broad provider support
-- **Dynamic Agent Prompt** — STEP 0 date range + full configuration summary sent to LLM
+- **Dynamic Agent Prompt** — STEP 0 date range + country/continent news sources + full configuration summary sent to LLM
 - **Self-Contained APK** — All assets bundled via Capacitor, no external server needed
 - **GitHub Action Builds** — Automated APK generation on every push
 
