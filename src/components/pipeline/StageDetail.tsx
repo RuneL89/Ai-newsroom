@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import type { StageRecord } from '../../lib/pipelineTypes';
-import { FileText, Zap, ScrollText, Clock, ExternalLink } from 'lucide-react';
+import { FileText, Zap, ScrollText, Clock, ExternalLink, FileCheck } from 'lucide-react';
 
 interface Agent1Metadata {
   firstDraft?: string;
@@ -23,7 +23,7 @@ interface StageDetailProps {
   stage: StageRecord | null;
 }
 
-type TabId = 'articles' | 'stream' | 'prompt';
+type TabId = 'articles' | 'stream' | 'output' | 'prompt';
 
 export default function StageDetail({ stage }: StageDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>('stream');
@@ -58,6 +58,7 @@ export default function StageDetail({ stage }: StageDetailProps) {
   const tabs: { id: TabId; label: string; icon: React.ElementType; show: boolean }[] = [
     { id: 'articles', label: 'Articles', icon: FileText, show: isAgent1 },
     { id: 'stream', label: 'Stream', icon: Zap, show: true },
+    { id: 'output', label: 'Agent Output', icon: FileCheck, show: isAgent1 },
     { id: 'prompt', label: 'Prompt', icon: ScrollText, show: !!stage.prompt },
   ];
 
@@ -119,6 +120,7 @@ export default function StageDetail({ stage }: StageDetailProps) {
       <div className="max-h-[500px] overflow-auto">
         {effectiveTab === 'articles' && <ArticlesTab metadata={metadata} />}
         {effectiveTab === 'stream' && <StreamTab stage={stage} />}
+        {effectiveTab === 'output' && <OutputTab stage={stage} metadata={metadata} />}
         {effectiveTab === 'prompt' && <PromptTab prompt={stage.prompt ?? ''} />}
       </div>
     </div>
@@ -243,6 +245,32 @@ function PromptTab({ prompt }: { prompt: string }) {
     <div className="p-4">
       <pre className="text-xs text-blue-300/90 whitespace-pre-wrap font-sans bg-slate-950/30 rounded p-3 border border-slate-700/50 max-h-[450px] overflow-auto">
         {prompt}
+      </pre>
+    </div>
+  );
+}
+
+function OutputTab({ stage, metadata }: { stage: StageRecord; metadata: Agent1Metadata | undefined }) {
+  if (stage.status === 'running') {
+    return (
+      <div className="p-4 text-sm text-slate-500 text-center">
+        Draft generation in progress...
+      </div>
+    );
+  }
+
+  if (!metadata?.firstDraft) {
+    return (
+      <div className="p-4 text-sm text-slate-500 text-center">
+        No draft output yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <pre className="text-xs text-slate-200 whitespace-pre-wrap font-sans bg-slate-950/30 rounded p-3 border border-slate-700/50 max-h-[450px] overflow-auto leading-relaxed">
+        {metadata.firstDraft}
       </pre>
     </div>
   );
