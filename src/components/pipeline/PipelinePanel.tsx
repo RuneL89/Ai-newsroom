@@ -38,7 +38,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     const agents = createAgentMap();
     const runner = new PipelineRunner(agents, {
       onStateChange: (newState) => {
-        setState((prev) => ({ ...prev, ...newState }));
+        setState((prev) => ({ ...prev, ...newState, selectedStageId: prev.selectedStageId }));
       },
       onComplete: (draft) => {
         console.log('Pipeline complete:', draft);
