@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import type { StageRecord } from '../../lib/pipelineTypes';
-import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { FileText, Zap, ScrollText, Clock, ExternalLink } from 'lucide-react';
 
 interface Agent1Metadata {
   firstDraft?: string;
@@ -12,6 +12,8 @@ interface Agent1Metadata {
     topic: string;
     localCount: number;
     continentCount: number;
+    localArticles: Array<{ title: string; source: string; url: string }>;
+    continentArticles: Array<{ title: string; source: string; url: string }>;
   }>;
   sourcesUsed?: string[];
   fallbackUsed?: boolean;
@@ -21,11 +23,10 @@ interface StageDetailProps {
   stage: StageRecord | null;
 }
 
+type TabId = 'articles' | 'stream' | 'prompt';
+
 export default function StageDetail({ stage }: StageDetailProps) {
-  const [showReasoning, setShowReasoning] = useState(true);
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [showFirstDraft, setShowFirstDraft] = useState(true);
-  const [showOutput, setShowOutput] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>('stream');
 
   if (!stage) {
     return (
@@ -50,6 +51,20 @@ export default function StageDetail({ stage }: StageDetailProps) {
     rejected: 'bg-amber-900/50 text-amber-300',
     error: 'bg-red-900/50 text-red-300',
   };
+
+  const isAgent1 = stage.id === 'agent1';
+  const metadata = stage.metadata as Agent1Metadata | undefined;
+
+  const tabs: { id: TabId; label: string; icon: React.ElementType; show: boolean }[] = [
+    { id: 'articles', label: 'Articles', icon: FileText, show: isAgent1 },
+    { id: 'stream', label: 'Stream', icon: Zap, show: true },
+    { id: 'prompt', label: 'Prompt', icon: ScrollText, show: !!stage.prompt },
+  ];
+
+  const visibleTabs = tabs.filter((t) => t.show);
+
+  // If current tab is hidden, switch to first visible
+  const effectiveTab = visibleTabs.find((t) => t.id === activeTab) ? activeTab : visibleTabs[0]?.id ?? 'stream';
 
   return (
     <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
@@ -77,216 +92,158 @@ export default function StageDetail({ stage }: StageDetailProps) {
         )}
       </div>
 
-      {/* Reasoning Panel */}
-      {!!stage.reasoning && (
-        <div className="border-b border-slate-700">
-          <button
-            onClick={() => setShowReasoning((p) => !p)}
-            className="w-full flex items-center justify-between px-4 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors"
-          >
-            <span className="text-xs font-medium text-purple-300">Reasoning</span>
-            {showReasoning ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
-            )}
-          </button>
-          {showReasoning && (
-            <pre className="p-4 text-xs text-purple-300/80 overflow-auto max-h-[200px] whitespace-pre-wrap bg-slate-950/30">
-              {stage.reasoning}
-            </pre>
+      {/* Tab Bar */}
+      <div className="flex border-b border-slate-700">
+        {visibleTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = effectiveTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors',
+                isActive
+                  ? 'bg-slate-800 text-white border-b-2 border-blue-500'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              )}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab Content */}
+      <div className="max-h-[500px] overflow-auto">
+        {effectiveTab === 'articles' && <ArticlesTab metadata={metadata} />}
+        {effectiveTab === 'stream' && <StreamTab stage={stage} />}
+        {effectiveTab === 'prompt' && <PromptTab prompt={stage.prompt ?? ''} />}
+      </div>
+    </div>
+  );
+}
+
+function ArticlesTab({ metadata }: { metadata: Agent1Metadata | undefined }) {
+  if (!metadata?.topicGroups || metadata.topicGroups.length === 0) {
+    return (
+      <div className="p-4 text-sm text-slate-500 text-center">
+        No articles found yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      {metadata.topicGroups.map((group, idx) => (
+        <div key={idx} className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-blue-300 uppercase tracking-wide">
+              Topic {idx + 1}: {group.topic}
+            </span>
+            <span className="text-[10px] text-slate-500">
+              {group.localCount} local / {group.continentCount} continent
+            </span>
+          </div>
+
+          {group.localArticles.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[10px] font-medium text-slate-400 uppercase">Local Articles</span>
+              {group.localArticles.map((article, i) => (
+                <ArticleRow key={`l-${i}`} article={article} />
+              ))}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Prompt Panel */}
-      {!!stage.prompt && (
-        <div className="border-b border-slate-700">
-          <button
-            onClick={() => setShowPrompt((p) => !p)}
-            className="w-full flex items-center justify-between px-4 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors"
-          >
-            <span className="text-xs font-medium text-blue-300">Prompt</span>
-            {showPrompt ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
-            )}
-          </button>
-          {showPrompt && (
-            <pre className="p-4 text-xs text-blue-300/80 overflow-auto max-h-[300px] whitespace-pre-wrap bg-slate-950/30">
-              {stage.prompt}
-            </pre>
+          {group.continentArticles.length > 0 && (
+            <div className="space-y-1 pt-1">
+              <span className="text-[10px] font-medium text-slate-400 uppercase">Continent Articles</span>
+              {group.continentArticles.map((article, i) => (
+                <ArticleRow key={`c-${i}`} article={article} />
+              ))}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* First Draft Panel (Agent 1 only) */}
-      {stage.id === 'agent1' && !!stage.metadata && typeof stage.metadata === 'object' && (stage.metadata as Agent1Metadata).firstDraft && (
-        <div className="border-b border-slate-700">
-          <button
-            onClick={() => setShowFirstDraft((p) => !p)}
-            className="w-full flex items-center justify-between px-4 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors"
-          >
-            <span className="text-xs font-medium text-emerald-300">First Draft</span>
-            {showFirstDraft ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
+          {idx < (metadata?.topicGroups?.length ?? 0) - 1 && <hr className="border-slate-700/50" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ArticleRow({ article }: { article: { title: string; source: string; url: string } }) {
+  return (
+    <div className="flex items-start gap-2 px-2 py-1.5 rounded bg-slate-800/50 hover:bg-slate-800 transition-colors">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-slate-200 truncate" title={article.title}>
+          {article.title}
+        </div>
+        <div className="text-[10px] text-slate-500">{article.source}</div>
+      </div>
+      {article.url && (
+        <a
+          href={article.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 text-slate-500 hover:text-blue-400 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function StreamTab({ stage }: { stage: StageRecord }) {
+  const hasReasoning = stage.reasoning && stage.reasoning.length > 0;
+  const hasOutput = stage.output && stage.output.length > 0;
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Real-time stream */}
+      {hasReasoning && (
+        <div className="space-y-1">
+          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Live Stream</span>
+          <pre className="text-xs text-purple-300/90 whitespace-pre-wrap font-sans bg-slate-950/30 rounded p-3 border border-slate-700/50 min-h-[80px]">
+            {stage.reasoning}
+            {stage.status === 'running' && (
+              <span className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-0.5 align-middle" />
             )}
-          </button>
-          {showFirstDraft && (
-            <pre className="p-4 text-xs text-emerald-300/80 overflow-auto max-h-[400px] whitespace-pre-wrap font-sans bg-slate-950/30">
-              {(stage.metadata as Agent1Metadata).firstDraft}
-            </pre>
-          )}
+          </pre>
         </div>
       )}
 
-      {/* Output Panel */}
-      {!!stage.output && (
-        <div>
-          <button
-            onClick={() => setShowOutput((p) => !p)}
-            className="w-full flex items-center justify-between px-4 py-2 bg-slate-800/50 hover:bg-slate-800 transition-colors"
-          >
-            <span className="text-xs font-medium text-slate-300">Output</span>
-            {showOutput ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
-            )}
-          </button>
-          {showOutput && (
-            <pre className="p-4 text-xs text-slate-300 overflow-auto max-h-[300px] whitespace-pre-wrap font-sans">
-              {stage.output}
-            </pre>
-          )}
+      {/* Final output */}
+      {hasOutput && stage.status !== 'running' && (
+        <div className="space-y-1">
+          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Final Output</span>
+          <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans bg-slate-950/30 rounded p-3 border border-slate-700/50 max-h-[300px] overflow-auto">
+            {stage.output}
+          </pre>
         </div>
       )}
 
-      {/* Audit Results (for Editor gates) */}
-      {!!stage.metadata && (
-        <div className="px-4 py-3 border-t border-slate-700 space-y-3">
-          <AuditMetadata metadata={stage.metadata} />
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!stage.reasoning && !stage.output && stage.status === 'pending' && (
-        <div className="p-4 text-sm text-slate-500 text-center">
-          Waiting to start...
+      {!hasReasoning && !hasOutput && (
+        <div className="text-sm text-slate-500 text-center py-8">
+          {stage.status === 'pending'
+            ? 'Waiting to start...'
+            : stage.status === 'running'
+            ? 'Starting stream...'
+            : 'No stream data available.'}
         </div>
       )}
     </div>
   );
 }
 
-interface RuleItem {
-  rule_name: string;
-  status: 'PASS' | 'FAIL';
-  details?: string;
-  rejection_reason?: string;
-}
-
-interface StoryItem {
-  story_id?: number;
-  theme_id?: number;
-  rules: RuleItem[];
-}
-
-interface AuditMeta {
-  approval_status?: string;
-  rewriter_instructions?: string;
-  stories?: StoryItem[];
-  themes?: StoryItem[];
-}
-
-function AuditMetadata({ metadata }: { metadata: unknown }) {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const m = metadata as AuditMeta;
-
-  const approvalStatus = m.approval_status;
-  const rewriterInstructions = m.rewriter_instructions;
-  const stories = m.stories;
-
+function PromptTab({ prompt }: { prompt: string }) {
   return (
-    <div className="space-y-3">
-      {/* Approval status */}
-      {approvalStatus && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-400">Approval:</span>
-          <span
-            className={cn(
-              'text-xs px-2 py-0.5 rounded-full font-medium',
-              approvalStatus === 'APPROVED'
-                ? 'bg-green-900/50 text-green-300'
-                : 'bg-amber-900/50 text-amber-300'
-            )}
-          >
-            {approvalStatus}
-          </span>
-        </div>
-      )}
-
-      {/* Rule breakdown per story/theme */}
-      {(stories ?? []).length > 0 && (
-        <div className="space-y-2">
-          <span className="text-xs font-medium text-slate-400">Audit Breakdown</span>
-          {stories!.map((story) => {
-            const rules = story.rules || [];
-            const id = story.theme_id ?? story.story_id ?? 0;
-            return (
-              <div key={id} className="space-y-1">
-                {rules.map((rule, idx) => {
-                  const isFail = rule.status === 'FAIL';
-                  const rejectionReason = rule.rejection_reason;
-                  return (
-                    <div
-                      key={idx}
-                      className={cn(
-                        'rounded px-2 py-1.5 text-[11px]',
-                        isFail
-                          ? 'bg-amber-900/20 border border-amber-500/20'
-                          : 'bg-green-900/10 border border-green-500/10'
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            'font-medium',
-                            isFail ? 'text-amber-300' : 'text-green-300'
-                          )}
-                        >
-                          {rule.status === 'PASS' ? '✓' : '✗'} {rule.rule_name}
-                        </span>
-                        {rule.details && (
-                          <span className="text-slate-500">— {rule.details}</span>
-                        )}
-                      </div>
-                      {isFail && rejectionReason && (
-                        <p className="mt-1 text-amber-200/80 leading-relaxed pl-4 border-l-2 border-amber-500/30">
-                          {rejectionReason}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Rewriter instructions */}
-      {rewriterInstructions && (
-        <div className="bg-slate-800/50 rounded p-3 border border-slate-700">
-          <span className="text-xs font-medium text-slate-400">Rewriter Instructions</span>
-          <pre className="mt-1 text-[11px] text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">
-            {rewriterInstructions}
-          </pre>
-        </div>
-      )}
+    <div className="p-4">
+      <pre className="text-xs text-blue-300/90 whitespace-pre-wrap font-sans bg-slate-950/30 rounded p-3 border border-slate-700/50 max-h-[450px] overflow-auto">
+        {prompt}
+      </pre>
     </div>
   );
 }

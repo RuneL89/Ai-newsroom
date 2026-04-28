@@ -90,6 +90,16 @@ export async function streamLLM(
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
+  const isKimi = /kimi/i.test(config.model);
+  const requestBody: Record<string, unknown> = {
+    model: config.model || 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+    stream: true,
+  };
+  if (isKimi) {
+    requestBody.thinking = { type: 'enabled' };
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -97,11 +107,7 @@ export async function streamLLM(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.apiKey}`,
       },
-      body: JSON.stringify({
-        model: config.model || 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        stream: true,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -138,17 +144,23 @@ export async function streamLLM(
 
         try {
           const chunk = JSON.parse(data);
-          const delta = chunk.choices?.[0]?.delta;
+          const choice = chunk.choices?.[0];
+          const delta = choice?.delta;
           if (!delta) continue;
 
-          if (delta.reasoning_content) {
-            callbacks.onReasoningChunk?.(delta.reasoning_content);
+          // Reasoning tokens: check multiple field names used by different providers
+          const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking;
+          if (reasoning) {
+            callbacks.onReasoningChunk?.(reasoning);
           }
-          if (delta.content) {
+
+          // Content tokens: emit even empty strings (some APIs use them as keep-alives)
+          if (delta.content !== undefined && delta.content !== null) {
             callbacks.onContentChunk?.(delta.content);
           }
 
-          if (chunk.choices?.[0]?.finish_reason) {
+          // Only finish if there's no more content/reasoning in this chunk
+          if (choice?.finish_reason && !reasoning && !delta.content) {
             callbacks.onDone?.();
             return;
           }

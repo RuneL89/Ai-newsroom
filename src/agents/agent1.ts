@@ -89,6 +89,9 @@ export function createAgent1(): AgentFn {
       },
       onContentChunk: (chunk) => {
         draft += chunk;
+        // Stream draft content to reasoning so user sees real-time progress
+        // (most LLMs don't emit reasoning_content, so this gives visual feedback)
+        onReasoningChunk(chunk);
       },
       onError: (err) => {
         throw err;
@@ -115,6 +118,8 @@ export function createAgent1(): AgentFn {
           topic: g.topic,
           localCount: g.localArticles.length,
           continentCount: g.continentArticles.length,
+          localArticles: g.localArticles.slice(0, 10).map(a => ({ title: a.title, source: a.source, url: a.url })),
+          continentArticles: g.continentArticles.slice(0, 10).map(a => ({ title: a.title, source: a.source, url: a.url })),
         })),
         sourcesUsed: parsed.sources,
         fallbackUsed: parsed.fallbackUsed,
