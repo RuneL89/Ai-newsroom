@@ -9,6 +9,7 @@ import type {
 } from './pipelineTypes';
 import { STAGE_DEFINITIONS } from './pipelineTypes';
 import type { SessionConfig } from './sessionConfig';
+import { PipelineService } from './pipelineService';
 
 const MAX_RETRIES = 3;
 
@@ -51,6 +52,19 @@ export class PipelineRunner {
   private updateState(partial: Partial<PipelineState>) {
     this.state = { ...this.state, ...partial };
     this.callbacks.onStateChange(this.state);
+    this.updateNotification();
+  }
+
+  private updateNotification() {
+    if (this.state.status !== 'running') return;
+    const stage = this.state.currentStageId
+      ? this.state.stages.find((s) => s.id === this.state.currentStageId)
+      : null;
+    const stageName = stage?.name ?? 'Starting...';
+    const statusText = stage?.status === 'running'
+      ? `${stageName} in progress...`
+      : `Moving to ${stageName}...`;
+    PipelineService.updateStatus(statusText);
   }
 
   private updateStage(stageId: StageId, partial: Partial<StageRecord>) {
@@ -62,6 +76,7 @@ export class PipelineRunner {
 
   async run(sessionConfig: SessionConfig) {
     this.abortController = new AbortController();
+    await PipelineService.start('Starting pipeline...');
     this.updateState({
       ...createInitialState(),
       status: 'running',
@@ -96,6 +111,7 @@ export class PipelineRunner {
             currentStageId: null,
             finalDraft: draft,
           });
+          await PipelineService.stop();
           this.callbacks.onComplete(draft);
           return;
         }
@@ -105,12 +121,14 @@ export class PipelineRunner {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.updateState({ status: 'error', error: message });
+      await PipelineService.stop();
       this.callbacks.onError(message);
     }
   }
 
   stop() {
     this.abortController?.abort();
+    PipelineService.stop();
   }
 
   getState(): PipelineState {
