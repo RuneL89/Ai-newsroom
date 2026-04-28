@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 class PipelineService : Service() {
 
     companion object {
+        const val TAG = "PipelineService"
         const val CHANNEL_ID = "ai_newsroom_pipeline"
         const val NOTIFICATION_ID = 1
         const val ACTION_START = "START"
@@ -27,26 +28,35 @@ class PipelineService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        android.util.Log.d(TAG, "onCreate")
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        android.util.Log.d(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> {
                 val status = intent.getStringExtra(EXTRA_STATUS) ?: "Pipeline running..."
+                android.util.Log.d(TAG, "START with status: $status")
                 acquireWakeLock()
                 startForeground(NOTIFICATION_ID, buildNotification(status))
+                android.util.Log.d(TAG, "startForeground called")
             }
             ACTION_UPDATE -> {
                 val status = intent.getStringExtra(EXTRA_STATUS) ?: "Pipeline running..."
+                android.util.Log.d(TAG, "UPDATE with status: $status")
                 val notification = buildNotification(status)
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.notify(NOTIFICATION_ID, notification)
             }
             ACTION_STOP -> {
+                android.util.Log.d(TAG, "STOP")
                 releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+            }
+            else -> {
+                android.util.Log.w(TAG, "Unknown action: ${intent?.action}")
             }
         }
         return START_STICKY

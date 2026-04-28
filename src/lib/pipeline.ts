@@ -170,12 +170,18 @@ export class PipelineRunner {
         const result = await agent(
           ctx,
           (chunk) => {
+            if (this.abortController?.signal.aborted) {
+              throw new Error('Pipeline aborted by user');
+            }
             reasoningChunks.push(chunk);
             this.updateStage(stageId, {
               reasoning: reasoningChunks.join(''),
             });
           },
           (partial) => {
+            if (this.abortController?.signal.aborted) {
+              throw new Error('Pipeline aborted by user');
+            }
             this.updateStage(stageId, partial);
           }
         );
@@ -192,11 +198,21 @@ export class PipelineRunner {
 
         return result;
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        // Don't retry on user abort
+        if (message === 'Pipeline aborted by user') {
+          this.updateStage(stageId, {
+            status: 'error',
+            output: 'Aborted by user',
+            completedAt: new Date().toISOString(),
+          });
+          throw err;
+        }
         retries++;
         if (retries >= MAX_RETRIES) {
           this.updateStage(stageId, {
             status: 'error',
-            output: `Failed after ${MAX_RETRIES} attempts: ${err instanceof Error ? err.message : String(err)}`,
+            output: `Failed after ${MAX_RETRIES} attempts: ${message}`,
             completedAt: new Date().toISOString(),
           });
           throw err;
