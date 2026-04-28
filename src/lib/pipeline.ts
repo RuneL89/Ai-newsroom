@@ -236,7 +236,7 @@ export class PipelineRunner {
       }
 
       case 'agent3':
-        return 'gate2';
+        return 'gate1';
 
       case 'gate2': {
         if (m.overall_status === 'ISSUES_FOUND') {
