@@ -310,6 +310,7 @@ function AuditTab({ stage, audit }: { stage: StageRecord; audit: AuditResult | u
     'Continent Theme 1',
     'Continent Theme 2',
     'Continent Theme 3',
+    'Editorial Segment',
   ];
 
   return (
