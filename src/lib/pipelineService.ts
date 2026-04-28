@@ -1,38 +1,28 @@
 import { registerPlugin } from '@capacitor/core';
 
-export interface PipelineStatusPlugin {
-  start(options: { status: string }): Promise<{ success: boolean }>;
-  updateStatus(options: { status: string }): Promise<{ success: boolean }>;
+export interface PipelineServicePlugin {
+  start(): Promise<{ success: boolean }>;
   stop(): Promise<{ success: boolean }>;
 }
 
-const PipelineStatus = registerPlugin<PipelineStatusPlugin>('PipelineStatus');
+const PipelineServiceNative = registerPlugin<PipelineServicePlugin>('PipelineService');
 
 let isRunning = false;
 
 export const PipelineService = {
-  async start(status: string): Promise<void> {
+  async start(): Promise<void> {
     try {
-      await PipelineStatus.start({ status });
+      await PipelineServiceNative.start();
       isRunning = true;
     } catch (err) {
       console.warn('PipelineService.start failed:', err);
     }
   },
 
-  async updateStatus(status: string): Promise<void> {
-    if (!isRunning) return;
-    try {
-      await PipelineStatus.updateStatus({ status });
-    } catch (err) {
-      console.warn('PipelineService.updateStatus failed:', err);
-    }
-  },
-
   async stop(): Promise<void> {
     if (!isRunning) return;
     try {
-      await PipelineStatus.stop();
+      await PipelineServiceNative.stop();
       isRunning = false;
     } catch (err) {
       console.warn('PipelineService.stop failed:', err);

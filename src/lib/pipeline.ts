@@ -10,6 +10,7 @@ import type {
 import { STAGE_DEFINITIONS } from './pipelineTypes';
 import type { SessionConfig } from './sessionConfig';
 import { PipelineService } from './pipelineService';
+import { PipelineNotifications } from './pipelineNotifications';
 
 const MAX_RETRIES = 3;
 
@@ -64,7 +65,7 @@ export class PipelineRunner {
     const statusText = stage?.status === 'running'
       ? `${stageName} in progress...`
       : `Moving to ${stageName}...`;
-    PipelineService.updateStatus(statusText);
+    PipelineNotifications.update(statusText);
   }
 
   private updateStage(stageId: StageId, partial: Partial<StageRecord>) {
@@ -76,7 +77,8 @@ export class PipelineRunner {
 
   async run(sessionConfig: SessionConfig) {
     this.abortController = new AbortController();
-    await PipelineService.start('Starting pipeline...');
+    await PipelineNotifications.start('Starting pipeline...');
+    await PipelineService.start();
     this.updateState({
       ...createInitialState(),
       status: 'running',
@@ -111,6 +113,7 @@ export class PipelineRunner {
             currentStageId: null,
             finalDraft: draft,
           });
+          await PipelineNotifications.stop();
           await PipelineService.stop();
           this.callbacks.onComplete(draft);
           return;
@@ -121,6 +124,7 @@ export class PipelineRunner {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.updateState({ status: 'error', error: message });
+      await PipelineNotifications.stop();
       await PipelineService.stop();
       this.callbacks.onError(message);
     }
@@ -128,6 +132,7 @@ export class PipelineRunner {
 
   stop() {
     this.abortController?.abort();
+    PipelineNotifications.stop();
     PipelineService.stop();
   }
 

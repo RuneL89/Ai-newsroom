@@ -8,7 +8,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 
-@CapacitorPlugin(name = "PipelineStatus")
+@CapacitorPlugin(name = "PipelineService")
 class PipelineStatusPlugin : Plugin() {
 
     companion object {
@@ -17,30 +17,14 @@ class PipelineStatusPlugin : Plugin() {
 
     @PluginMethod
     fun start(call: PluginCall) {
-        val status = call.getString("status", "Pipeline running...")
-        Log.d(TAG, "start() called with status: $status")
-
-        val intent = Intent(context, PipelineService::class.java).apply {
-            action = PipelineService.ACTION_START
-            putExtra(PipelineService.EXTRA_STATUS, status)
+        Log.d(TAG, "start() called")
+        try {
+            val intent = Intent(context, PipelineService::class.java)
+            context.startForegroundService(intent)
+            Log.d(TAG, "startForegroundService succeeded")
+        } catch (e: Exception) {
+            Log.e(TAG, "startForegroundService failed", e)
         }
-        context.startForegroundService(intent)
-
-        val result = JSObject()
-        result.put("success", true)
-        call.resolve(result)
-    }
-
-    @PluginMethod
-    fun updateStatus(call: PluginCall) {
-        val status = call.getString("status", "Pipeline running...")
-        Log.d(TAG, "updateStatus() called with status: $status")
-
-        val intent = Intent(context, PipelineService::class.java).apply {
-            action = PipelineService.ACTION_UPDATE
-            putExtra(PipelineService.EXTRA_STATUS, status)
-        }
-        context.startService(intent)
 
         val result = JSObject()
         result.put("success", true)
@@ -50,11 +34,14 @@ class PipelineStatusPlugin : Plugin() {
     @PluginMethod
     fun stop(call: PluginCall) {
         Log.d(TAG, "stop() called")
-
-        val intent = Intent(context, PipelineService::class.java).apply {
-            action = PipelineService.ACTION_STOP
+        try {
+            val intent = Intent(context, PipelineService::class.java).apply {
+                action = PipelineService.ACTION_STOP
+            }
+            context.startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "stop service failed", e)
         }
-        context.startService(intent)
 
         val result = JSObject()
         result.put("success", true)
