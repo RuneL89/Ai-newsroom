@@ -8,6 +8,11 @@ interface Agent1Metadata {
   selectionReport?: string;
   localArticlesFound?: number;
   continentArticlesFound?: number;
+  topicGroups?: Array<{
+    topic: string;
+    localCount: number;
+    continentCount: number;
+  }>;
   sourcesUsed?: string[];
   fallbackUsed?: boolean;
 }
@@ -185,7 +190,8 @@ interface RuleItem {
 }
 
 interface StoryItem {
-  story_id: number;
+  story_id?: number;
+  theme_id?: number;
   rules: RuleItem[];
 }
 
@@ -193,6 +199,7 @@ interface AuditMeta {
   approval_status?: string;
   rewriter_instructions?: string;
   stories?: StoryItem[];
+  themes?: StoryItem[];
 }
 
 function AuditMetadata({ metadata }: { metadata: unknown }) {
@@ -222,14 +229,15 @@ function AuditMetadata({ metadata }: { metadata: unknown }) {
         </div>
       )}
 
-      {/* Rule breakdown per story */}
-      {stories && stories.length > 0 && (
+      {/* Rule breakdown per story/theme */}
+      {(stories ?? []).length > 0 && (
         <div className="space-y-2">
           <span className="text-xs font-medium text-slate-400">Audit Breakdown</span>
-          {stories.map((story) => {
+          {stories!.map((story) => {
             const rules = story.rules || [];
+            const id = story.theme_id ?? story.story_id ?? 0;
             return (
-              <div key={story.story_id} className="space-y-1">
+              <div key={id} className="space-y-1">
                 {rules.map((rule, idx) => {
                   const isFail = rule.status === 'FAIL';
                   const rejectionReason = rule.rejection_reason;

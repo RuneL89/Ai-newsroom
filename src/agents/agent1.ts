@@ -1,79 +1,81 @@
 import type { AgentFn } from '../lib/pipelineTypes';
 import { loadApiConfig, streamLLM } from '../lib/apiConfig';
-import { searchNews, searchContinentNews } from '../lib/newsSearch';
-import { buildAgent1Prompt } from '../prompts/agent1';
+import { searchTopicLocal, searchTopicContinent } from '../lib/newsSearch';
+import { buildAgent1Prompt, type TopicArticleGroup } from '../prompts/agent1';
 import { parseAgent1Output } from './agent1Parse';
+import { getTopicSearchTerm } from '../data/topics';
+
+function getFreshness(timeframeId: string): string {
+  switch (timeframeId) {
+    case 'daily': return 'day';
+    case 'weekly': return 'week';
+    case 'monthly': return 'month';
+    default: return 'week';
+  }
+}
 
 export function createAgent1(): AgentFn {
   return async (ctx, onReasoningChunk) => {
     const { sessionConfig } = ctx;
     const country = sessionConfig.geography.country;
     const continent = sessionConfig.geography.continent;
+    const topics = sessionConfig.content.topics;
+    const freshness = getFreshness(sessionConfig.dates.timeframeId);
 
-    // STEP 1: Search local news
-    onReasoningChunk(`Searching local news for ${country.name}...\n`);
-
-    const primaryTopic = sessionConfig.content.topics[0] || 'General News';
-    const localQueries = sessionConfig.content.topics.map((t) => t.toLowerCase());
-
-    // Search each topic and merge results (deduplicated by URL)
-    const seenUrls = new Set<string>();
-    const localArticles: Awaited<ReturnType<typeof searchNews>> = [];
-
-    for (const query of localQueries.slice(0, 2)) {
-      const results = await searchNews({
-        countryCode: country.code,
-        language: country.language,
-        query,
-        fromDate: sessionConfig.dates.earliestDate,
-        toDate: sessionConfig.dates.today,
-        pageSize: 10,
-      });
-      for (const article of results) {
-        if (!seenUrls.has(article.url)) {
-          seenUrls.add(article.url);
-          localArticles.push(article);
-        }
-      }
+    // We need exactly 3 topics
+    if (topics.length !== 3) {
+      throw new Error(`Exactly 3 topics are required. Got: ${topics.length}`);
     }
 
-    // If we still have very few results, try a broader "news" query
-    if (localArticles.length < 3) {
-      const broadResults = await searchNews({
+    const topicGroups: TopicArticleGroup[] = [];
+
+    // STEP 1: Search local and continent news for each topic
+    for (let i = 0; i < topics.length; i++) {
+      const topic = topics[i];
+      const topicTerm = getTopicSearchTerm(topic, country.language);
+
+      onReasoningChunk(`Searching local news for Topic ${i + 1}: ${topic} (${topicTerm})...\n`);
+
+      const localArticles = await searchTopicLocal({
         countryCode: country.code,
-        language: country.language,
-        query: 'news',
-        fromDate: sessionConfig.dates.earliestDate,
-        toDate: sessionConfig.dates.today,
+        countryName: country.name,
+        topicQuery: topicTerm,
+        freshness,
         pageSize: 10,
       });
-      for (const article of broadResults) {
-        if (!seenUrls.has(article.url)) {
-          seenUrls.add(article.url);
-          localArticles.push(article);
-        }
-      }
+
+      onReasoningChunk(`  Found ${localArticles.length} local articles.\n`);
+
+      onReasoningChunk(`Searching continent news for Topic ${i + 1}: ${topic}...\n`);
+
+      const continentArticles = await searchTopicContinent({
+        continentName: continent.name,
+        topicQuery: topicTerm,
+        freshness,
+        pageSize: 10,
+      });
+
+      onReasoningChunk(`  Found ${continentArticles.length} continent articles.\n`);
+
+      topicGroups.push({
+        topic,
+        localArticles,
+        continentArticles,
+      });
     }
 
-    // STEP 2: Search continent news
-    onReasoningChunk(`Searching ${continent.name} news sources...\n`);
-
-    const continentArticles = await searchContinentNews({
-      query: primaryTopic.toLowerCase(),
-      fromDate: sessionConfig.dates.earliestDate,
-      toDate: sessionConfig.dates.today,
-      pageSize: 10,
-    });
+    const totalLocal = topicGroups.reduce((sum, g) => sum + g.localArticles.length, 0);
+    const totalContinent = topicGroups.reduce((sum, g) => sum + g.continentArticles.length, 0);
 
     onReasoningChunk(
-      `Found ${localArticles.length} local articles, ${continentArticles.length} continent articles.\n`
+      `Total: ${totalLocal} local articles, ${totalContinent} continent articles across ${topics.length} topics.\n`
     );
 
-    // STEP 3: Build prompt
+    // STEP 2: Build prompt
     onReasoningChunk('Building prompt with session context and requirements...\n');
-    const prompt = buildAgent1Prompt(sessionConfig, localArticles, continentArticles);
+    const prompt = buildAgent1Prompt(sessionConfig, topicGroups);
 
-    // STEP 4: Stream to LLM
+    // STEP 3: Stream to LLM
     onReasoningChunk('Sending to LLM for first draft generation...\n');
 
     let draft = '';
@@ -96,7 +98,7 @@ export function createAgent1(): AgentFn {
       },
     });
 
-    // STEP 5: Parse output
+    // STEP 4: Parse output
     onReasoningChunk('Parsing output...\n');
     const parsed = parseAgent1Output(draft);
 
@@ -107,8 +109,13 @@ export function createAgent1(): AgentFn {
       metadata: {
         firstDraft: parsed.draftScript,
         selectionReport: parsed.selectionReport,
-        localArticlesFound: localArticles.length,
-        continentArticlesFound: continentArticles.length,
+        localArticlesFound: totalLocal,
+        continentArticlesFound: totalContinent,
+        topicGroups: topicGroups.map(g => ({
+          topic: g.topic,
+          localCount: g.localArticles.length,
+          continentCount: g.continentArticles.length,
+        })),
         sourcesUsed: parsed.sources,
         fallbackUsed: parsed.fallbackUsed,
       },

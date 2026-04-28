@@ -2,7 +2,7 @@
 
 **Your personal AI news producer. In your pocket.**
 
-Pick any country on Earth. Select what kind of news you want, how you want it told, and who you want telling it. Then watch a team of six AI agents research local sources, write stories, edit them, fact-check every claim, and polish the final script — all in real time, right on your phone.
+Pick any country on Earth. Select three news topics, how you want them told, and who you want telling it. Then watch a team of six AI agents research local sources, synthesize themes, edit them, fact-check every claim, and polish the final script — all in real time, right on your phone.
 
 No newsroom. No subscription. No backend. Just you, your API keys, and a fully autonomous pipeline that turns raw global events into a professional news podcast tailored exactly to your perspective.
 
@@ -17,22 +17,22 @@ Imagine waking up in Berlin and wanting to know what's happening in Nairobi — 
 You configure:
 - **Country** — 195 countries with local language and native news sources
 - **Timeframe** — Daily briefing, weekly review, or monthly roundup
-- **Topics** — Up to 3 from politics, economy, sport, technology, crime, and more
+- **Topics** — Exactly 3 from politics, economy, sport, technology, crime, and more
 - **Voice** — Professional narrators with distinct accents and personalities
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
 Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 
-1. **Researcher** — Queries NewsData.io for real local news, scores stories by newsworthiness, and writes the first draft script with music cues and editorial framing
-2. **Editor (Phase 1)** — Checks for completeness, clarity, and professional broadcast standards
+1. **Researcher** — Queries Brave Search for real local news across your 3 topics, groups results by theme, and writes the first draft script with music cues and editorial framing
+2. **Editor (Phase 1)** — Checks for theme completeness, cross-theme coherence, and professional broadcast standards
 3. **Writer** — Polishes the script for active voice, oral readability, and narrative flow
 4. **Fact Checker** — Verifies every claim against independent sources
 5. **Researcher (Fix)** — If facts fail, finds replacements and provides repair instructions
 6. **Editor (Final)** — Gives the final approval gate before audio production
 7. **Audio Producer** — Generates narration with the selected voice, mixes music stings, and assembles the final MP3
 
-Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, and what it produced. For the Researcher, the **first draft** is saved as a separate artifact you can inspect before it goes to the Editor. If an editor rejects a story, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
+Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, and what it produced. For the Researcher, the **first draft** is saved as a separate artifact you can inspect before it goes to the Editor. If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
 **This is not a chatbot. This is a production pipeline.**
 
@@ -80,22 +80,41 @@ interface AgentOutput {
 ```
 
 Gates (Editor and Fact Checker) return structured JSON:
-- **Editor** → `AuditResult` with per-story/per-rule PASS/FAIL status and `rejection_reason` for every failure
-- **Fact Checker** → `FactCheckResult` with per-story grades and `overall_status: PASS | ISSUES_FOUND`
+- **Editor** → `AuditResult` with per-theme/per-rule PASS/FAIL status and `rejection_reason` for every failure
+- **Fact Checker** → `FactCheckResult` with per-theme grades and `overall_status: PASS | ISSUES_FOUND`
 - **Fixer** → `RecoveryResult` with `writer_instructions` for the Writer to apply
 
 ### Permanent Requirements
 
-Story completeness rules and editor audit checklists live in `src/prompts/shared/completenessRequirements.ts` as session-independent constants. They include:
+Theme completeness rules and editor audit checklists live in `src/prompts/shared/completenessRequirements.ts` as session-independent constants. They include:
 
-- Minimum 1500 characters per story
-- 60%+ of sentences between 15–30 words
+- Minimum **2000 characters per theme summary**
+- At least **3 distinct developments, events, or angles** per theme
+- **60%+ of sentences between 15–30 words**
 - All local terms defined on first mention
-- All 5 Ws + How answered
 - Zero-knowledge assumption (write for listeners with no prior context)
 - Continent-specific angles for continental news
+- **Cross-theme coherence** — transitions, logical progression, and explicit cross-references between themes
+- **Source attribution** — cite specific sources by name within the theme text
+- **Forward-looking close** — every theme ends with "what to watch"
 
 These are the golden rules. They don't change per session.
+
+---
+
+## Topic-Based News Summaries
+
+Unlike traditional newscasts that report individual stories one by one, AI Newsroom produces **thematic summaries**. For each of your 3 selected topics, you get:
+
+- **A local theme** — synthesizing 3+ developments in your chosen country
+- **A continental theme** — synthesizing 3+ developments across the continent
+
+Each theme is ~2,000 characters and weaves together multiple sources into a coherent narrative. This approach:
+- **Works with web search snippets** — no full-article API required
+- **Surfaces trends and context** — not just isolated events
+- **Produces better podcasts** — thematic segments flow naturally, with explicit transitions
+
+The Researcher is explicitly instructed to **prioritize the country's listed news sources** (from `src/data/countries.ts`) and to **prefer local-language sources** for local themes. When multiple articles cover the same development, the source from the priority list wins.
 
 ---
 
@@ -120,13 +139,13 @@ The pipeline UI is designed for phones:
 | Build | Vite |
 | Mobile | Capacitor (Android APK) |
 | Storage | `@capacitor/preferences` (Android SharedPreferences) |
-| News API | NewsData.io (real-time news from 206 countries, 89 languages) |
+| News Search | Brave Search API (web search with `freshness` filtering) |
 | LLM API | OpenAI-compatible `/chat/completions` (SSE streaming) |
 | CI/CD | GitHub Actions |
 
 ### Self-Contained APK
 
-Everything bundles into the APK. No external web server. No cloud backend. The app talks directly to your chosen LLM provider using your API key.
+Everything bundles into the APK. No external web server. No cloud backend. The app talks directly to your chosen LLM provider and Brave Search using your API keys.
 
 ### Supported Providers
 
@@ -137,8 +156,8 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 - OpenRouter (unified access to many models)
 - Local/Custom endpoints (Ollama, llama.cpp, vLLM, etc.)
 
-**News Provider:**
-- NewsData.io — 96,000+ sources, 206 countries, 89 languages. Free tier: 200 requests/day.
+**News Search:**
+- Brave Search API — Web search with freshness filtering (day/week/month). Free tier: 2,000 queries/month.
 
 ---
 
@@ -156,8 +175,8 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   └── ...
 ├── src/
 │   ├── agents/               # Agent implementations
-│   │   ├── agent1.ts         # News Researcher — real NewsData.io + LLM implementation
-│   │   ├── agent1Parse.ts    # Output parser for Agent 1
+│   │   ├── agent1.ts         # News Researcher — real Brave Search + LLM implementation
+│   │   ├── agent1Parse.ts    # Output parser for Agent 1 (6 theme sections)
 │   │   ├── stubs/            # Configurable stub agents for pipeline testing
 │   │   │   ├── agent3Stub.ts
 │   │   │   ├── agent5Stub.ts
@@ -180,15 +199,15 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   │   └── ScreenTabs.tsx
 │   ├── data/                 # Static data & configuration
 │   │   ├── bias.ts
-│   │   ├── countries.ts      # 196-country dataset with flags & sources
+│   │   ├── countries.ts      # 195-country dataset with news sources & languages
 │   │   ├── countryBounds.ts
 │   │   ├── music.ts
 │   │   ├── timeframes.ts
-│   │   ├── topics.ts
+│   │   ├── topics.ts         # Topic taxonomy with translations
 │   │   └── voices.ts
 │   ├── lib/                  # Core logic
-│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, NewsData.io key storage
-│   │   ├── newsSearch.ts     # NewsData.io API wrapper with fallback chain
+│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, Brave key storage
+│   │   ├── newsSearch.ts     # Brave Search API wrapper with fallback chain
 │   │   ├── pipeline.ts       # Pipeline runner state machine
 │   │   ├── pipelineTypes.ts  # Pipeline type definitions
 │   │   ├── sessionConfig.ts  # SessionConfig builder & formatter
@@ -226,8 +245,8 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 
 ## Usage
 
-1. **Configure your APIs** — Go to Configure API, add your LLM provider key AND your NewsData.io key, save and test both
-2. **Configure your podcast** — Go to Newsroom 2, pick a country, timeframe, topics, voice, music, and editorial angle
+1. **Configure your APIs** — Go to Configure API, add your LLM provider key AND your Brave Search API key, save and test both
+2. **Configure your podcast** — Go to Newsroom 2, pick a country, timeframe, **exactly 3 topics**, voice, music, and editorial angle
 3. **Run Full Pipeline** — Tap the button and watch the agents work
 4. **Inspect stages** — Tap any stage card to see reasoning, the full LLM prompt, the first draft, and output
 

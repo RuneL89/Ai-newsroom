@@ -10,7 +10,9 @@ export const createGate1Stub = (config: StubConfig): AgentFn => {
       'Checking block structure and transitions...',
       'Validating continent country attribution...',
       'Checking oral readability and sentence length...',
-      `Running completeness audit for ${ctx.sessionConfig.geography.country.name} stories...`,
+      `Running completeness audit for ${ctx.sessionConfig.geography.country.name} themes...`,
+      'Checking cross-theme coherence...',
+      'Verifying source attribution...',
       'All checks complete.',
     ];
 
@@ -24,24 +26,25 @@ export const createGate1Stub = (config: StubConfig): AgentFn => {
     const decision = config.gate1Decision || 'APPROVE';
 
     const allRules: Array<{ rule_name: string; status: 'PASS' | 'FAIL'; details?: string; rejection_reason?: string }> = [
-      { rule_name: 'MINIMUM_LENGTH', status: 'PASS', details: 'All stories ≥1500 chars' },
+      { rule_name: 'MINIMUM_LENGTH', status: 'PASS', details: 'All themes ≥2000 chars' },
+      { rule_name: 'MULTIPLE_DEVELOPMENTS', status: 'PASS', details: 'All themes have ≥3 distinct angles' },
       { rule_name: 'SENTENCE_LENGTH', status: 'PASS', details: '60%+ sentences 15-30 words' },
       { rule_name: 'DEFINED_TERMS', status: 'PASS', details: 'All terms defined on first mention' },
-      { rule_name: 'FIVE_WS', status: 'PASS', details: 'Who/What/When/Where/Why/How answered' },
-      { rule_name: 'CONTINENT_ANGLE', status: 'PASS', details: 'Continent stories have angle' },
+      { rule_name: 'COHERENCE', status: 'PASS', details: 'Transitions, progression, cross-references present' },
+      { rule_name: 'SOURCE_ATTRIBUTION', status: 'PASS', details: 'Sources cited by name within themes' },
     ];
 
     // If rejecting, flip some rules to FAIL with rejection_reasons
     if (decision === 'REJECT') {
       allRules[0].status = 'FAIL';
-      allRules[0].details = 'Story 2 is 980 characters';
+      allRules[0].details = 'Theme 2 is 1650 characters';
       allRules[0].rejection_reason =
-        'Story 2 is only 980 characters (minimum 1500). Expand with additional details, direct quotes, or historical background to reach the required length.';
+        'Theme 2 is only 1650 characters (minimum 2000). Expand with additional developments, direct quotes, or historical background to reach the required length.';
 
       allRules[3].status = 'FAIL';
-      allRules[3].details = 'Story 4 missing "How"';
+      allRules[3].details = 'Theme 4 missing term definitions';
       allRules[3].rejection_reason =
-        'Story 4 explains who, what, when, where, and why, but does not explain HOW the event unfolded. Add a sentence describing the mechanism or process.';
+        'Theme 4 uses "ECB" and "quantitative easing" without defining them for an international audience. Add parenthetical explanations on first mention.';
     }
 
     const failReasons = allRules
@@ -56,9 +59,9 @@ export const createGate1Stub = (config: StubConfig): AgentFn => {
 
     const metadata = {
       approval_status: decision,
-      stories: [
+      themes: [
         {
-          story_id: 1,
+          theme_id: 1,
           rules: allRules,
         },
       ],

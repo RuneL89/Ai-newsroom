@@ -1,8 +1,9 @@
 import type { SessionConfig } from '../lib/sessionConfig';
 import { formatSessionContextForLLM } from '../lib/sessionConfig';
 import {
-  STORY_COMPLETENESS_REQUIREMENTS,
+  THEME_COMPLETENESS_REQUIREMENTS,
   EDITOR_COMPLETENESS_AUDIT,
+  COHERENCE_REQUIREMENTS,
 } from './shared/completenessRequirements';
 import { biasAgent1Instructions, biasEditorialGuidelines } from '../data/bias';
 import type { NewsArticle } from '../lib/newsSearch';
@@ -20,80 +21,130 @@ function buildArticleContext(articles: NewsArticle[], label: string): string {
     return `**${label}**: No articles found.`;
   }
   const lines = articles.map((a, i) => {
-    const date = a.publishedAt ? ` (${a.publishedAt.split(' ')[0]})` : '';
+    const date = a.publishedAt ? ` (${a.publishedAt})` : '';
     return `${i + 1}. **${a.title}**${date}\n   Source: ${a.source}\n   ${a.description}`;
   });
-  return `**${label}** (${articles.length} articles):\n\n${lines.join('\n\n')}`;
+  return `**${label}** (${articles.length} articles):
+
+${lines.join('\n\n')}`;
+}
+
+export interface TopicArticleGroup {
+  topic: string;
+  localArticles: NewsArticle[];
+  continentArticles: NewsArticle[];
 }
 
 export function buildAgent1Prompt(
   config: SessionConfig,
-  localArticles: NewsArticle[],
-  continentArticles: NewsArticle[]
+  topicGroups: TopicArticleGroup[]
 ): string {
-  const completenessReqs = replacePlaceholders(STORY_COMPLETENESS_REQUIREMENTS, config);
+  const completenessReqs = replacePlaceholders(THEME_COMPLETENESS_REQUIREMENTS, config);
   const editorAudit = replacePlaceholders(EDITOR_COMPLETENESS_AUDIT, config);
+  const coherenceReqs = replacePlaceholders(COHERENCE_REQUIREMENTS, config);
   const biasInstructions = biasAgent1Instructions[config.editorial.biasId];
   const biasGuidelines = biasEditorialGuidelines[config.editorial.biasId];
 
-  const localContext = buildArticleContext(localArticles, `Local News: ${config.geography.country.name}`);
-  const continentContext = buildArticleContext(
-    continentArticles,
-    `Continent News: ${config.geography.continent.name}`
-  );
+  const countrySources = config.geography.country.newsSources.join(', ');
+  const continentSources = config.geography.continent.newsSources.map(s => s.name).join(', ');
+
+  // Build per-topic article context
+  const topicContexts = topicGroups.map((group, idx) => {
+    const localCtx = buildArticleContext(group.localArticles, `Local: ${config.geography.country.name} — ${group.topic}`);
+    const continentCtx = buildArticleContext(group.continentArticles, `Continent: ${config.geography.continent.name} — ${group.topic}`);
+    return `### TOPIC ${idx + 1}: ${group.topic}
+
+${localCtx}
+
+${continentCtx}`;
+  }).join('\n\n---\n\n');
 
   const musicSuite = config.content.musicSuite;
   const musicInstructions = musicSuite
-    ? `**MUSIC CUES** (insert exactly as shown):\n- Opening: [INTRO: ${musicSuite.intro}]\n- Between each story: [STORY STING: ${musicSuite.storySting}]\n- Between country and continent blocks: [BLOCK TRANSITION: ${musicSuite.blockSting}]\n- Closing: [OUTRO: ${musicSuite.outro}]`
+    ? `**MUSIC CUES** (insert exactly as shown):
+- Opening: [INTRO: ${musicSuite.intro}]
+- Between each theme: [STORY STING: ${musicSuite.storySting}]
+- Between local and continent blocks: [BLOCK TRANSITION: ${musicSuite.blockSting}]
+- Closing: [OUTRO: ${musicSuite.outro}]`
     : '';
 
   const editorialSegment = config.editorial.includeSegment
-    ? `**EDITORIAL SEGMENT** (MANDATORY — included because user selected it):\n- Place AFTER the ${config.geography.continent.name} News block, BEFORE the sign-off\n- Minimum 2500 characters\n- Apply **${config.editorial.biasLabel}** perspective MOST prominently (higher intensity than news segments)\n- Analyze themes from both ${config.geography.country.name} and ${config.geography.continent.name} blocks\n- Provide closure and wrap up the podcast\n\n${biasGuidelines}`
+    ? `**EDITORIAL SEGMENT** (MANDATORY — included because user selected it):
+- Place AFTER the ${config.geography.continent.name} News block, BEFORE the sign-off
+- Minimum 2500 characters
+- Apply **${config.editorial.biasLabel}** perspective MOST prominently (higher intensity than news segments)
+- Analyze themes from both ${config.geography.country.name} and ${config.geography.continent.name} blocks
+- Provide closure and wrap up the podcast
+
+${biasGuidelines}`
     : '';
 
   const topicList = config.content.topics.join(', ');
 
   return `## ROLE
-You are a professional news researcher and podcast scriptwriter for a "Professional newscast"-style international news podcast.
+You are a senior news producer and podcast scriptwriter for a professional international news podcast.
 
 ${formatSessionContextForLLM(config)}
 
-## DATE RANGE (STRICT)
-Only use stories published between **${config.dates.earliestDate}** and **${config.dates.today}**.
-Stories outside this window are INVALID and must be excluded.
+## SOURCE PRIORITIZATION RULES (MANDATORY)
+
+You MUST prioritize and preferentially use articles from the following verified news sources:
+
+**${config.geography.country.name} Local Sources (PRIMARY — use these first):**
+${countrySources}
+
+**${config.geography.continent.name} Continental Sources (PRIMARY for continent themes):**
+${continentSources}
+
+**Source Selection Hierarchy:**
+1. If an article is from one of the listed local sources, it takes PRIORITY over generic sources
+2. If multiple articles cover the same development, choose the one from the listed sources
+3. Only use non-listed sources if the listed sources do not cover the topic at all
+4. For local themes, PREFER sources publishing in ${config.geography.country.language}
+5. For continent themes, English-language sources are acceptable but still prioritize the listed continental sources
+
+## TRANSLATION & LOCALIZATION REQUIREMENTS
+
+**Topic Translation:**
+The selected topics are: **${topicList}**. The local language is **${config.geography.country.language}**.
+- When searching and evaluating local articles, consider how these topics translate conceptually into ${config.geography.country.language}-language news coverage
+- Topic terms in ${config.geography.country.language} may have different connotations — interpret articles through the local cultural lens
+- If a local article covers the topic implicitly (e.g., an election article covers "Politics" even if not labeled as such), COUNT it toward the topic
+
+**Local Language Preference:**
+- For LOCAL themes: Prioritize articles from ${config.geography.country.language}-language sources
+- If ${config.geography.country.language}-language sources are sparse, English-language local sources are acceptable as secondary
+- For CONTINENT themes: English is the primary language, but continent-specific language sources are welcome
 
 ## API SEARCH RESULTS
-The following articles were returned by the news API. Use ONLY these articles — do not invent stories.
-If insufficient articles exist, note this in the selection report and work with what you have.
 
-${localContext}
+The following articles were returned by Brave Search, grouped by topic. Use ONLY these articles — do not invent stories or facts.
+If insufficient articles exist for a topic, note this in the selection report and work with what you have.
 
-${continentContext}
+${topicContexts}
 
-**Note on sources**: The typical media landscape in ${config.geography.country.name} includes outlets such as ${config.geography.country.newsSources.join(', ')}, but the actual articles above are what the API returned. Use whatever sources are available.
+## THEME SCORING
 
-## TOPIC TRANSLATION
-The selected topics are: **${topicList}**. The local language is **${config.geography.country.language}**.
-When evaluating local articles, consider how these topics translate conceptually into ${config.geography.country.language}-language news coverage.
-
-## STORY SCORING
-Score each article 1-10 using Professional newscast news values:
-- **Immediacy**: How recent/timely?
+Score each theme's source material 1-10 using professional news values:
+- **Immediacy**: How recent/timely are the developments?
 - **Proximity**: Relevance to ${config.geography.country.name} and ${config.geography.continent.name}?
 - **Consequence**: Impact on listeners' lives?
 - **Prominence**: Importance of people/places involved?
-- **Human Interest**: Emotional connection, relatability?
+- **Source Quality**: Are the articles from the listed priority sources?
+- **Diversity**: Does the topic show multiple angles/developments?
 
 ## SELECTION RULES
-- Select the **top 5 highest-scored** ${config.geography.country.name} stories from the local articles
-- Select the **top 3 highest-scored** ${config.geography.continent.name} stories from the continent articles
-- Topic priority: ${topicList} first, General News as fallback
-- If fewer than 5 local stories exist, use all available and note the shortfall
-- If fewer than 3 continent stories exist, use all available and note the shortfall
+- For each of the 3 topics, build a theme summary from the available local articles
+- For each of the 3 topics, build a theme summary from the available continent articles
+- If a topic has fewer than 5 articles locally, use whatever is available and note the shortfall
+- If a topic has fewer than 5 articles continentally, use whatever is available and note the shortfall
+- If a topic has NO articles, use the fallback General News articles and explicitly state this
 
 ${completenessReqs}
 
 ${editorAudit}
+
+${coherenceReqs}
 
 ## EDITORIAL PERSPECTIVE
 When writing the first draft, frame all facts through **${config.editorial.biasLabel}** perspective.
@@ -105,10 +156,10 @@ ${musicInstructions}
 ${editorialSegment}
 
 ## SCRIPT STRUCTURE
-1. **Opening** — introduce the podcast with music cue
-2. **Headlines** — brief teaser of top stories
-3. **${config.geography.country.name} News Block** (5 stories max) — each with music cues
-4. **${config.geography.continent.name} News Block** (3 stories max) — each with music cues
+1. **Opening** — introduce the podcast with music cue, name the country and timeframe
+2. **Headlines** — brief teaser of the 3 local themes
+3. **${config.geography.country.name} News Block** (3 theme summaries) — each with music cues
+4. **${config.geography.continent.name} News Block** (3 theme summaries) — each with music cues
 ${config.editorial.includeSegment ? `5. **Editorial Segment** — thematic analysis with ${config.editorial.biasLabel} perspective` : ''}
 ${config.editorial.includeSegment ? '6. **Sign-off** — closing with music cue' : '5. **Sign-off** — closing with music cue'}
 
@@ -119,22 +170,27 @@ You MUST produce exactly two sections:
 ## FIRST DRAFT SCRIPT
 [Full script with music cues — ALL IN ENGLISH]
 
-## STORY SELECTION REPORT
-- Topic Focus: ${topicList}
-- Fallback to General News: [Yes/No]
-- ${config.geography.country.name} Stories Selected: [N stories with scores and sources]
-  * From primary topics: [count]
-  * From fallback: [count]
-  * Source: [news source name]
-  * Original language: [language]
-  * Date: YYYY-MM-DD
-- ${config.geography.continent.name} Stories Selected: [N stories with scores and sources]
-  * Source: [news source name]
-  * Original language: English
-  * Date: YYYY-MM-DD
-- Selection Method: Auto-selected highest scores
-- API Articles Available: ${localArticles.length} local, ${continentArticles.length} continent
-- Fallback Used: [Yes/No]
+## THEME SELECTION REPORT
+- Topics: ${topicList}
+- Fallback to General News: [Yes/No per topic]
+- ${config.geography.country.name} Themes:
+  * Theme 1 (${topicGroups[0]?.topic || 'N/A'}): [N articles used, sources, assessment]
+  * Theme 2 (${topicGroups[1]?.topic || 'N/A'}): [N articles used, sources, assessment]
+  * Theme 3 (${topicGroups[2]?.topic || 'N/A'}): [N articles used, sources, assessment]
+- ${config.geography.continent.name} Themes:
+  * Theme 4 (${topicGroups[0]?.topic || 'N/A'}): [N articles used, sources, assessment]
+  * Theme 5 (${topicGroups[1]?.topic || 'N/A'}): [N articles used, sources, assessment]
+  * Theme 6 (${topicGroups[2]?.topic || 'N/A'}): [N articles used, sources, assessment]
+- Source Breakdown:
+  * From priority local sources: [count]
+  * From priority continent sources: [count]
+  * From other sources: [count]
+- Coherence Check:
+  * Transitions present: [Yes/No]
+  * Progression logical: [Yes/No]
+  * Cross-references: [Yes/No]
+  * Tone consistent: [Yes/No]
+- API Articles Available: ${topicGroups.reduce((sum, g) => sum + g.localArticles.length + g.continentArticles.length, 0)} total
 \`\`\`
 `;
 }

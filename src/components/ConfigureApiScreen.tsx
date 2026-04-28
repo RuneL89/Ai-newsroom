@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Newspaper } from 'lucide-react';
+import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { loadApiConfig, saveApiConfig, testApiConnection, loadNewsApiKey, saveNewsApiKey, testNewsApiKey, providerOptions } from '../lib/apiConfig';
+import { loadApiConfig, saveApiConfig, testApiConnection, loadBraveApiKey, saveBraveApiKey, testBraveApiKey, providerOptions } from '../lib/apiConfig';
 import type { ApiConfig, ApiProvider } from '../types';
 
 export default function ConfigureApiScreen() {
@@ -13,21 +13,21 @@ export default function ConfigureApiScreen() {
     model: 'gpt-4o',
   });
   const [showKey, setShowKey] = useState(false);
-  const [newsApiKey, setNewsApiKey] = useState('');
-  const [showNewsKey, setShowNewsKey] = useState(false);
+  const [braveApiKey, setBraveApiKey] = useState('');
+  const [showBraveKey, setShowBraveKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [isTestingNews, setIsTestingNews] = useState(false);
-  const [newsTestResult, setNewsTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTestingBrave, setIsTestingBrave] = useState(false);
+  const [braveTestResult, setBraveTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadApiConfig(), loadNewsApiKey()]).then(([loaded, newsKey]) => {
+    Promise.all([loadApiConfig(), loadBraveApiKey()]).then(([loaded, braveKey]) => {
       if (!cancelled) {
         setConfig(loaded);
-        setNewsApiKey(newsKey);
+        setBraveApiKey(braveKey);
         setIsLoaded(true);
       }
     });
@@ -49,7 +49,7 @@ export default function ConfigureApiScreen() {
     try {
       await Promise.all([
         saveApiConfig(config),
-        saveNewsApiKey(newsApiKey),
+        saveBraveApiKey(braveApiKey),
       ]);
       toast.success('API configuration saved!');
     } catch {
@@ -75,19 +75,19 @@ export default function ConfigureApiScreen() {
     }
   };
 
-  const handleTestNews = async () => {
-    setIsTestingNews(true);
-    setNewsTestResult(null);
+  const handleTestBrave = async () => {
+    setIsTestingBrave(true);
+    setBraveTestResult(null);
     try {
-      const result = await testNewsApiKey(newsApiKey);
-      setNewsTestResult(result);
+      const result = await testBraveApiKey(braveApiKey);
+      setBraveTestResult(result);
       if (result.success) {
         toast.success(result.message);
       } else {
         toast.error(result.message);
       }
     } finally {
-      setIsTestingNews(false);
+      setIsTestingBrave(false);
     }
   };
 
@@ -109,7 +109,7 @@ export default function ConfigureApiScreen() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">Configure API</h1>
-              <p className="text-sm text-slate-400">Set up your LLM provider for audio generation</p>
+              <p className="text-sm text-slate-400">Set up your LLM provider and Brave Search for news discovery</p>
             </div>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function ConfigureApiScreen() {
         </Section>
 
         {/* API Key */}
-        <Section icon={Key} title="API Key">
+        <Section icon={Key} title="LLM API Key">
           <div className="relative">
             <input
               type={showKey ? 'text' : 'password'}
@@ -185,46 +185,49 @@ export default function ConfigureApiScreen() {
           </p>
         </Section>
 
-        {/* News Data API */}
-        <Section icon={Newspaper} title="News Data API">
+        {/* Brave Search API */}
+        <Section icon={Search} title="Brave Search API">
           <div className="relative">
             <input
-              type={showNewsKey ? 'text' : 'password'}
-              value={newsApiKey}
-              onChange={(e) => setNewsApiKey(e.target.value)}
-              placeholder="pub_..."
+              type={showBraveKey ? 'text' : 'password'}
+              value={braveApiKey}
+              onChange={(e) => setBraveApiKey(e.target.value)}
+              placeholder="BSA..."
               className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
             />
             <button
-              onClick={() => setShowNewsKey((prev) => !prev)}
+              onClick={() => setShowBraveKey((prev) => !prev)}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-slate-700 text-slate-400 transition-colors"
-              title={showNewsKey ? 'Hide API key' : 'Show API key'}
+              title={showBraveKey ? 'Hide API key' : 'Show API key'}
             >
-              {showNewsKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showBraveKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
           <p className="text-xs text-slate-500 mt-2">
-            Your NewsData.io API key for fetching news articles. Free tier: 200 requests/day.
+            Your Brave Search API key for discovering news articles. Free tier: 2,000 queries/month. Get your key at{' '}
+            <a href="https://api.search.brave.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+              api.search.brave.com
+            </a>.
           </p>
           <button
-            onClick={handleTestNews}
-            disabled={isTestingNews || !newsApiKey.trim()}
+            onClick={handleTestBrave}
+            disabled={isTestingBrave || !braveApiKey.trim()}
             className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 border border-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isTestingNews ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
-            {isTestingNews ? 'Testing...' : 'Test NewsData.io Connection'}
+            {isTestingBrave ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
+            {isTestingBrave ? 'Testing...' : 'Test Brave Search Connection'}
           </button>
-          {newsTestResult && (
+          {braveTestResult && (
             <div
               className={cn(
                 'mt-2 flex items-center gap-3 px-3 py-2 rounded-lg border text-sm',
-                newsTestResult.success
+                braveTestResult.success
                   ? 'bg-green-900/20 border-green-500/30 text-green-300'
                   : 'bg-red-900/20 border-red-500/30 text-red-300'
               )}
             >
-              {newsTestResult.success ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
-              <span>{newsTestResult.message}</span>
+              {braveTestResult.success ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+              <span>{braveTestResult.message}</span>
             </div>
           )}
         </Section>

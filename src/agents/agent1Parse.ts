@@ -6,8 +6,8 @@ export interface ParsedAgent1Output {
 }
 
 export function parseAgent1Output(raw: string): ParsedAgent1Output {
-  const draftMatch = raw.match(/## FIRST DRAFT SCRIPT\s*\n?([\s\S]*?)(?=## STORY SELECTION REPORT|$)/i);
-  const reportMatch = raw.match(/## STORY SELECTION REPORT\s*\n?([\s\S]*)/i);
+  const draftMatch = raw.match(/## FIRST DRAFT SCRIPT\s*\n?([\s\S]*?)(?=## THEME SELECTION REPORT|$)/i);
+  const reportMatch = raw.match(/## THEME SELECTION REPORT\s*\n?([\s\S]*)/i);
 
   const draftScript = draftMatch ? draftMatch[1].trim() : raw.trim();
   const selectionReport = reportMatch ? reportMatch[1].trim() : '';

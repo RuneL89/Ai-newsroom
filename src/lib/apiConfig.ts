@@ -167,35 +167,38 @@ export async function streamLLM(
   }
 }
 
-const NEWSDATA_API_KEY = 'newsdata_api_key';
+const BRAVE_API_KEY = 'brave_api_key';
 
-export async function loadNewsApiKey(): Promise<string> {
+export async function loadBraveApiKey(): Promise<string> {
   try {
-    const { value } = await Preferences.get({ key: NEWSDATA_API_KEY });
+    const { value } = await Preferences.get({ key: BRAVE_API_KEY });
     return value ?? '';
   } catch {
     return '';
   }
 }
 
-export async function saveNewsApiKey(key: string): Promise<void> {
-  await Preferences.set({ key: NEWSDATA_API_KEY, value: key });
+export async function saveBraveApiKey(key: string): Promise<void> {
+  await Preferences.set({ key: BRAVE_API_KEY, value: key });
 }
 
-export async function testNewsApiKey(key: string): Promise<{ success: boolean; message: string }> {
+export async function testBraveApiKey(key: string): Promise<{ success: boolean; message: string }> {
   try {
     if (!key.trim()) {
-      return { success: false, message: 'NewsData.io API key is required' };
+      return { success: false, message: 'Brave Search API key is required' };
     }
-    const response = await fetch(`https://newsdata.io/api/1/sources?apikey=${key.trim()}&country=us`, {
+    const response = await fetch('https://api.search.brave.com/res/v1/web/search?q=test&count=1', {
       method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Subscription-Token': key.trim(),
+      },
     });
     if (response.ok) {
-      return { success: true, message: 'NewsData.io connection successful!' };
+      return { success: true, message: 'Brave Search connection successful!' };
     }
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.results?.message || errorData.message || `HTTP ${response.status}`;
-    return { success: false, message: `Connection failed: ${errorMessage}` };
+    const errorText = await response.text().catch(() => '');
+    return { success: false, message: `Connection failed: HTTP ${response.status} ${errorText}` };
   } catch (err) {
     return { success: false, message: `Connection failed: ${err instanceof Error ? err.message : String(err)}` };
   }

@@ -11,7 +11,7 @@ import { biasOptions, biasAgent1Instructions } from '../data/bias';
 import { BiasSelector } from './BiasSelector';
 import { CountryMap } from './CountryMap';
 import { CountrySearch } from './CountrySearch';
-import { loadApiConfig, loadNewsApiKey } from '../lib/apiConfig';
+import { loadApiConfig, loadBraveApiKey } from '../lib/apiConfig';
 import { buildSessionConfig } from '../lib/sessionConfig';
 import type { SessionConfig } from '../lib/sessionConfig';
 import PipelinePanel from './pipeline/PipelinePanel';
@@ -43,8 +43,8 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
 
   // Check API keys on mount
   useEffect(() => {
-    Promise.all([loadApiConfig(), loadNewsApiKey()]).then(([llmConfig, newsKey]) => {
-      setHasApiKey(!!llmConfig.apiKey.trim() && !!newsKey.trim());
+    Promise.all([loadApiConfig(), loadBraveApiKey()]).then(([llmConfig, braveKey]) => {
+      setHasApiKey(!!llmConfig.apiKey.trim() && !!braveKey.trim());
     });
   }, []);
 
@@ -65,14 +65,22 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
     toast.success(`Selected ${country.name}`);
   }, []);
 
-  // Handle topic toggle
+  // Handle topic toggle — enforce exactly 3 topics
   const handleTopicToggle = useCallback((topic: TopicType) => {
     setSelectedTopics(prev => {
       if (prev.includes(topic)) {
-        if (prev.length === 1) return prev;
+        // Prevent deselecting if it would drop below 3
+        if (prev.length <= 3) {
+          toast.error('Exactly 3 topics are required');
+          return prev;
+        }
         return prev.filter(t => t !== topic);
       }
-      if (prev.length >= 3) return prev;
+      if (prev.length >= 3) {
+        // Replace the last selected topic with the new one
+        const newTopics = [...prev.slice(1), topic];
+        return newTopics;
+      }
       return [...prev, topic];
     });
   }, []);
@@ -138,7 +146,9 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
     }
   }, [playingMusic]);
 
-  const sessionConfig = selectedCountry
+  const isConfigValid = selectedCountry !== null && selectedTopics.length === 3;
+
+  const sessionConfig = isConfigValid
     ? buildSessionConfig({
         country: selectedCountry,
         continent: selectedContinent,
@@ -212,7 +222,7 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
             </Section>
 
             {/* Topics */}
-            <Section icon={Newspaper} title="Topics">
+            <Section icon={Newspaper} title="Topics (Select Exactly 3)">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {topics.map(topic => (
                   <button
@@ -229,8 +239,11 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-slate-500 mt-2">
-                Selected: {selectedTopics.length}/3
+              <p className={cn(
+                "text-xs mt-2",
+                selectedTopics.length === 3 ? "text-green-400" : "text-amber-400"
+              )}>
+                Selected: {selectedTopics.length}/3 {selectedTopics.length !== 3 ? '(exactly 3 required)' : '✓'}
               </p>
             </Section>
 
@@ -391,7 +404,9 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Topics</span>
-                  <span className="text-white">{selectedTopics.join(', ')}</span>
+                  <span className={cn("text-white", selectedTopics.length !== 3 && "text-amber-400")}>
+                    {selectedTopics.join(', ')} {selectedTopics.length !== 3 && '(need 3)'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Voice</span>
@@ -419,7 +434,14 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
             {!hasApiKey && (
               <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/20 border border-amber-500/30 rounded-lg text-amber-300 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>No API keys configured. Go to Configure API to add your LLM and News Data keys.</span>
+                <span>No API keys configured. Go to Configure API to add your LLM and Brave Search keys.</span>
+              </div>
+            )}
+
+            {selectedCountry && selectedTopics.length !== 3 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-900/20 border border-amber-500/30 rounded-lg text-amber-300 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>Please select exactly 3 topics to run the pipeline.</span>
               </div>
             )}
 
@@ -428,7 +450,7 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
               <PipelinePanel sessionConfig={sessionConfig} />
             ) : (
               <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 text-center text-sm text-slate-500">
-                Select a country to run the pipeline
+                {selectedCountry ? 'Select exactly 3 topics to run the pipeline' : 'Select a country to run the pipeline'}
               </div>
             )}
           </div>

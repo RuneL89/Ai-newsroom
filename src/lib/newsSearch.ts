@@ -1,6 +1,6 @@
-import { loadNewsApiKey } from './apiConfig';
+import { loadBraveApiKey } from './apiConfig';
 
-const NEWSDATA_BASE_URL = 'https://newsdata.io/api/1/latest';
+const BRAVE_BASE_URL = 'https://api.search.brave.com/res/v1/web/search';
 
 export interface NewsArticle {
   title: string;
@@ -14,132 +14,176 @@ export interface NewsArticle {
   country: string;
 }
 
-interface NewsDataArticle {
-  article_id: string;
+interface BraveWebResult {
   title: string;
-  link: string;
-  keywords?: string[];
-  creator?: string[];
-  video_url?: string | null;
   description: string;
-  content: string;
-  pubDate: string;
-  pubDateTZ: string;
-  image_url?: string | null;
-  source_id: string;
-  source_name: string;
-  source_url: string;
-  source_icon?: string | null;
-  language: string;
-  country?: string[];
-  category?: string[];
-}
-
-interface NewsDataResponse {
-  status: string;
-  totalResults: number;
-  results?: NewsDataArticle[];
-  nextPage?: string;
-}
-
-function normalizeArticle(raw: NewsDataArticle): NewsArticle {
-  return {
-    title: raw.title || '',
-    description: raw.description || '',
-    content: raw.content || raw.description || '',
-    source: raw.source_name || raw.source_id || 'Unknown',
-    sourceUrl: raw.source_url || '',
-    url: raw.link || '',
-    publishedAt: raw.pubDate || '',
-    language: raw.language || '',
-    country: raw.country?.[0] || '',
+  url: string;
+  age?: string;
+  page_age?: string;
+  language?: string;
+  meta_url?: {
+    hostname?: string;
+    netloc?: string;
   };
 }
 
-async function fetchNewsData(params: Record<string, string>): Promise<NewsArticle[]> {
-  const apiKey = await loadNewsApiKey();
-  if (!apiKey.trim()) {
-    throw new Error('NewsData.io API key is missing. Go to Configure API to add one.');
-  }
-
-  const searchParams = new URLSearchParams({ ...params, apikey: apiKey.trim() });
-  const response = await fetch(`${NEWSDATA_BASE_URL}?${searchParams.toString()}`);
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.results?.message || errorData.message || `HTTP ${response.status}`;
-    throw new Error(`NewsData.io error: ${message}`);
-  }
-
-  const data = (await response.json()) as NewsDataResponse;
-  if (data.status !== 'success') {
-    throw new Error(`NewsData.io error: ${data.status}`);
-  }
-
-  const results = data.results ?? [];
-  return results.map(normalizeArticle);
+interface BraveResponse {
+  query?: {
+    original?: string;
+  };
+  web?: {
+    results?: BraveWebResult[];
+  };
 }
 
-export interface SearchNewsParams {
-  countryCode: string;
-  language: string;
+function normalizeArticle(raw: BraveWebResult, countryCode: string): NewsArticle {
+  const hostname = raw.meta_url?.hostname || raw.meta_url?.netloc || new URL(raw.url).hostname;
+  const publishedAt = raw.page_age || raw.age || '';
+  return {
+    title: raw.title || '',
+    description: raw.description || '',
+    content: raw.description || '',
+    source: hostname,
+    sourceUrl: `https://${hostname}`,
+    url: raw.url || '',
+    publishedAt,
+    language: raw.language || 'en',
+    country: countryCode,
+  };
+}
+
+async function fetchBraveSearch(params: {
   query: string;
-  fromDate: string;
-  toDate: string;
+  count?: number;
+  freshness?: string;
+  searchLang?: string;
+  country?: string;
+}): Promise<NewsArticle[]> {
+  const apiKey = await loadBraveApiKey();
+  if (!apiKey.trim()) {
+    throw new Error('Brave Search API key is missing. Go to Configure API to add one.');
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('q', params.query);
+  searchParams.set('count', String(Math.min(params.count || 10, 20)));
+  if (params.freshness) searchParams.set('freshness', params.freshness);
+  if (params.searchLang) searchParams.set('search_lang', params.searchLang);
+  if (params.country) searchParams.set('country', params.country.toLowerCase());
+  searchParams.set('safesearch', 'off');
+
+  const response = await fetch(`${BRAVE_BASE_URL}?${searchParams.toString()}`, {
+    headers: {
+      'Accept': 'application/json',
+      'X-Subscription-Token': apiKey.trim(),
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Brave Search error: HTTP ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as BraveResponse;
+  const results = data.web?.results ?? [];
+  return results.map((r) => normalizeArticle(r, params.country || 'XX'));
+}
+
+export interface SearchTopicParams {
+  countryCode: string;
+  countryName: string;
+  topicQuery: string;
+  freshness: string;
   pageSize?: number;
 }
 
 /**
- * Search news with automatic fallback chain:
- * 1. country + local language + query
- * 2. country + query (drop language)
- * 3. English keyword search with country name
- * 4. Return whatever exists
+ * Search Brave for a specific topic in a country.
+ * Falls back to general news if insufficient results.
  */
-export async function searchNews(params: SearchNewsParams): Promise<NewsArticle[]> {
-  const { countryCode, language, query, fromDate, toDate, pageSize = 20 } = params;
+export async function searchTopicLocal(params: SearchTopicParams): Promise<NewsArticle[]> {
+  const { countryCode, countryName, topicQuery, freshness, pageSize = 10 } = params;
 
-  // Attempt 1: country + local language + query
-  const attempt1 = await fetchNewsData({
-    country: countryCode.toLowerCase(),
-    language: language.toLowerCase().slice(0, 2),
-    q: query,
-    from_date: fromDate,
-    to_date: toDate,
-    size: String(Math.min(pageSize, 10)),
+  // Attempt 1: topic + country name
+  const attempt1 = await fetchBraveSearch({
+    query: `${topicQuery} ${countryName} news`,
+    count: pageSize,
+    freshness,
+    country: countryCode,
   });
-  if (attempt1.length >= 3) return attempt1;
+  if (attempt1.length >= 5) return attempt1;
 
-  // Attempt 2: country + query (drop language filter)
-  const attempt2 = await fetchNewsData({
-    country: countryCode.toLowerCase(),
-    q: query,
-    from_date: fromDate,
-    to_date: toDate,
-    size: String(Math.min(pageSize, 10)),
+  // Attempt 2: broader search with just country + topic
+  const attempt2 = await fetchBraveSearch({
+    query: `${topicQuery} ${countryName}`,
+    count: pageSize,
+    freshness,
+    country: countryCode,
   });
-  const combined = [...attempt1, ...attempt2.filter((a) => !attempt1.find((b) => b.url === a.url))];
-  if (combined.length >= 3) return combined;
+
+  const combined = [...attempt1];
+  const seenUrls = new Set(attempt1.map((a) => a.url));
+  for (const article of attempt2) {
+    if (!seenUrls.has(article.url)) {
+      seenUrls.add(article.url);
+      combined.push(article);
+    }
+  }
+  if (combined.length >= 5) return combined;
+
+  // Fallback: general news for this country
+  const fallback = await fetchBraveSearch({
+    query: `${countryName} news`,
+    count: pageSize,
+    freshness,
+    country: countryCode,
+  });
+  for (const article of fallback) {
+    if (!seenUrls.has(article.url)) {
+      seenUrls.add(article.url);
+      combined.push(article);
+    }
+  }
 
   return combined;
 }
 
 /**
- * Search continent-level news in English using continent news sources.
+ * Search Brave for a specific topic at continent level.
  */
-export async function searchContinentNews(params: {
-  query: string;
-  fromDate: string;
-  toDate: string;
+export async function searchTopicContinent(params: {
+  continentName: string;
+  topicQuery: string;
+  freshness: string;
   pageSize?: number;
 }): Promise<NewsArticle[]> {
-  const { query, fromDate, toDate, pageSize = 20 } = params;
+  const { continentName, topicQuery, freshness, pageSize = 10 } = params;
 
-  return fetchNewsData({
-    q: query,
-    language: 'en',
-    from_date: fromDate,
-    to_date: toDate,
-    size: String(Math.min(pageSize, 10)),
+  const results = await fetchBraveSearch({
+    query: `${topicQuery} ${continentName} news`,
+    count: pageSize,
+    freshness,
+    searchLang: 'en',
   });
+
+  if (results.length >= 5) return results;
+
+  // Fallback: general continent news
+  const fallback = await fetchBraveSearch({
+    query: `${continentName} news`,
+    count: pageSize,
+    freshness,
+    searchLang: 'en',
+  });
+
+  const seenUrls = new Set(results.map((a) => a.url));
+  const combined = [...results];
+  for (const article of fallback) {
+    if (!seenUrls.has(article.url)) {
+      seenUrls.add(article.url);
+      combined.push(article);
+    }
+  }
+
+  return combined;
 }
