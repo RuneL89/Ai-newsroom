@@ -1,14 +1,7 @@
+import { CapacitorHttp } from '@capacitor/core';
 import { loadBraveApiKey } from './apiConfig';
 
 const BRAVE_BASE_URL = 'https://api.search.brave.com/res/v1/web/search';
-
-// Brave Search API only supports these 37 country codes for the `country` parameter.
-// For countries outside this list, we omit the param and rely on query terms.
-export const BRAVE_SUPPORTED_COUNTRIES = new Set([
-  'AR', 'AU', 'AT', 'BE', 'BR', 'CA', 'CL', 'DK', 'FI', 'FR', 'DE', 'GR', 'HK',
-  'IN', 'ID', 'IT', 'JP', 'KR', 'MY', 'MX', 'NL', 'NZ', 'NO', 'CN', 'PL', 'PT',
-  'PH', 'RU', 'SA', 'ZA', 'ES', 'SE', 'CH', 'TW', 'TR', 'GB', 'US',
-]);
 
 export interface NewsArticle {
   title: string;
@@ -44,6 +37,14 @@ interface BraveResponse {
   };
 }
 
+// Brave Search API only supports these 37 country codes for the `country` parameter.
+// For countries outside this list, we omit the param and rely on query terms.
+export const BRAVE_SUPPORTED_COUNTRIES = new Set([
+  'AR', 'AU', 'AT', 'BE', 'BR', 'CA', 'CL', 'DK', 'FI', 'FR', 'DE', 'GR', 'HK',
+  'IN', 'ID', 'IT', 'JP', 'KR', 'MY', 'MX', 'NL', 'NZ', 'NO', 'CN', 'PL', 'PT',
+  'PH', 'RU', 'SA', 'ZA', 'ES', 'SE', 'CH', 'TW', 'TR', 'GB', 'US',
+]);
+
 function normalizeArticle(raw: BraveWebResult, countryCode: string): NewsArticle {
   const hostname = raw.meta_url?.hostname || raw.meta_url?.netloc || new URL(raw.url).hostname;
   const publishedAt = raw.page_age || raw.age || '';
@@ -72,29 +73,34 @@ async function fetchBraveSearch(params: {
     throw new Error('Brave Search API key is missing. Go to Configure API to add one.');
   }
 
-  const searchParams = new URLSearchParams();
-  searchParams.set('q', params.query);
-  searchParams.set('count', String(Math.min(params.count || 10, 20)));
-  if (params.freshness) searchParams.set('freshness', params.freshness);
-  if (params.searchLang) searchParams.set('search_lang', params.searchLang);
+  const queryParams: Record<string, string> = {
+    q: params.query,
+    count: String(Math.min(params.count || 10, 20)),
+    safesearch: 'off',
+  };
+  if (params.freshness) queryParams.freshness = params.freshness;
+  if (params.searchLang) queryParams.search_lang = params.searchLang;
   if (params.country && BRAVE_SUPPORTED_COUNTRIES.has(params.country.toUpperCase())) {
-    searchParams.set('country', params.country.toLowerCase());
+    queryParams.country = params.country.toLowerCase();
   }
-  searchParams.set('safesearch', 'off');
 
-  const response = await fetch(`${BRAVE_BASE_URL}?${searchParams.toString()}`, {
+  const response = await CapacitorHttp.request({
+    url: BRAVE_BASE_URL,
+    method: 'GET',
     headers: {
       'Accept': 'application/json',
       'X-Subscription-Token': apiKey.trim(),
     },
+    params: queryParams,
+    responseType: 'json',
   });
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
+  if (response.status < 200 || response.status >= 300) {
+    const errorText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
     throw new Error(`Brave Search error: HTTP ${response.status} ${errorText}`);
   }
 
-  const data = (await response.json()) as BraveResponse;
+  const data = response.data as BraveResponse;
   const results = data.web?.results ?? [];
   return results.map((r) => normalizeArticle(r, params.country || 'XX'));
 }

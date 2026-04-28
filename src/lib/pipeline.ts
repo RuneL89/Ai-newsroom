@@ -149,12 +149,18 @@ export class PipelineRunner {
       try {
         const reasoningChunks: string[] = [];
 
-        const result = await agent(ctx, (chunk) => {
-          reasoningChunks.push(chunk);
-          this.updateStage(stageId, {
-            reasoning: reasoningChunks.join(''),
-          });
-        });
+        const result = await agent(
+          ctx,
+          (chunk) => {
+            reasoningChunks.push(chunk);
+            this.updateStage(stageId, {
+              reasoning: reasoningChunks.join(''),
+            });
+          },
+          (partial) => {
+            this.updateStage(stageId, partial);
+          }
+        );
 
         const status = this.inferStatus(stageId, result.metadata);
 

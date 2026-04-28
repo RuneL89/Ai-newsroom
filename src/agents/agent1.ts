@@ -15,7 +15,7 @@ function getFreshness(timeframeId: string): string {
 }
 
 export function createAgent1(): AgentFn {
-  return async (ctx, onReasoningChunk) => {
+  return async (ctx, onReasoningChunk, onUpdate) => {
     const { sessionConfig } = ctx;
     const country = sessionConfig.geography.country;
     const continent = sessionConfig.geography.continent;
@@ -74,6 +74,20 @@ export function createAgent1(): AgentFn {
     // STEP 2: Build prompt
     onReasoningChunk('Building prompt with session context and requirements...\n');
     const prompt = buildAgent1Prompt(sessionConfig, topicGroups);
+
+    // Publish articles and prompt to UI before LLM call so user can inspect them
+    onUpdate?.({
+      prompt,
+      metadata: {
+        topicGroups: topicGroups.map(g => ({
+          topic: g.topic,
+          localCount: g.localArticles.length,
+          continentCount: g.continentArticles.length,
+          localArticles: g.localArticles.slice(0, 10).map(a => ({ title: a.title, source: a.source, url: a.url })),
+          continentArticles: g.continentArticles.slice(0, 10).map(a => ({ title: a.title, source: a.source, url: a.url })),
+        })),
+      },
+    });
 
     // STEP 3: Stream to LLM
     onReasoningChunk('Sending to LLM for first draft generation...\n');

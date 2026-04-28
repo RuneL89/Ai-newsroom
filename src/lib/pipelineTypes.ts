@@ -34,7 +34,8 @@ export interface AgentOutput {
 
 export type AgentFn = (
   ctx: AgentContext,
-  onReasoningChunk: (chunk: string) => void
+  onReasoningChunk: (chunk: string) => void,
+  onUpdate?: (partial: Partial<StageRecord>) => void
 ) => Promise<AgentOutput>;
 
 export type PipelineStatus = 'idle' | 'running' | 'complete' | 'error';

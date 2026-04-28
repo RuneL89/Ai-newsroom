@@ -199,17 +199,21 @@ export async function testBraveApiKey(key: string): Promise<{ success: boolean; 
     if (!key.trim()) {
       return { success: false, message: 'Brave Search API key is required' };
     }
-    const response = await fetch('https://api.search.brave.com/res/v1/web/search?q=test&count=1', {
+    const { CapacitorHttp } = await import('@capacitor/core');
+    const response = await CapacitorHttp.request({
+      url: 'https://api.search.brave.com/res/v1/web/search',
       method: 'GET',
       headers: {
         'Accept': 'application/json',
         'X-Subscription-Token': key.trim(),
       },
+      params: { q: 'test', count: '1' },
+      responseType: 'json',
     });
-    if (response.ok) {
+    if (response.status >= 200 && response.status < 300) {
       return { success: true, message: 'Brave Search connection successful!' };
     }
-    const errorText = await response.text().catch(() => '');
+    const errorText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
     return { success: false, message: `Connection failed: HTTP ${response.status} ${errorText}` };
   } catch (err) {
     return { success: false, message: `Connection failed: ${err instanceof Error ? err.message : String(err)}` };
