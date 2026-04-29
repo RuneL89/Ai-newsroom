@@ -113,7 +113,7 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 {
   "approval_status": "APPROVED" | "REJECTED",
   "has_feedback": true | false,
-  "rewrite_scope": "FULL_SCRIPT" | "SEGMENTS",
+  "rewrite_scope": "" | "FULL_SCRIPT" | "SEGMENTS",
   "failed_segments": [1, 3],
   "stories": [
     {
@@ -142,15 +142,14 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 
 - **rewrite_scope**: Set to "FULL_SCRIPT" if ≥4 stories fail, OR any segment is missing, OR cross-segment coherence issues exist. Set to "SEGMENTS" if 1-3 stories fail and all segments exist with good transitions.
 - **failed_segments**: Array of story_ids (1-7) that failed. Only required when rewrite_scope is "SEGMENTS". Omit or set to empty array when rewrite_scope is "FULL_SCRIPT".
-- If approval_status is "APPROVED", set rewrite_scope to "FULL_SCRIPT" and failed_segments to empty array.
+- If approval_status is "APPROVED", set rewrite_scope to "" (empty string) and failed_segments to empty array.
 - If approval_status is "REJECTED", rewrite_scope MUST be "FULL_SCRIPT" or "SEGMENTS" based on the failure pattern.
 
 ## CRITICAL RULES
 
-- Set "has_feedback": true if you have ANY observations, suggestions, or required changes — even minor ones.
-- Set "has_feedback": false ONLY if the draft is perfect with zero changes needed.
+- Set "has_feedback": true ONLY if either: (a) approval_status is "REJECTED", or (b) you have an observation that does NOT fall under any of the specific rules above but still matters for script quality. Do NOT set has_feedback for minor nitpicks.
+- Set "has_feedback": false if approval_status is "APPROVED" and you have no extra observations beyond the rule checklist.
 - If approval_status is "REJECTED", has_feedback MUST be true.
-- If approval_status is "APPROVED" but you have minor suggestions, set has_feedback: true.
 - Include "rejection_reason" for EVERY FAIL rule. Be specific: quote the problematic text, explain why it fails, and say exactly what to change.
 - "rewriter_instructions" must be actionable enough that a writer can fix the draft without re-reading the criteria.
 - There must be exactly ${editorialStoryCount} stories in the output (6 themes${hasEditorialSegment ? ' + 1 editorial segment' : ''}).

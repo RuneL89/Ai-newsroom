@@ -70,7 +70,14 @@ export function parseFullScriptEditorOutput(raw: string): AuditResult {
   });
 
   // Parse rewrite_scope and failed_segments
-  const rewriteScope = obj.rewrite_scope === 'SEGMENTS' ? 'SEGMENTS' : 'FULL_SCRIPT';
+  let rewriteScope: 'FULL_SCRIPT' | 'SEGMENTS' | undefined;
+  if (obj.rewrite_scope === 'SEGMENTS') {
+    rewriteScope = 'SEGMENTS';
+  } else if (obj.rewrite_scope === 'FULL_SCRIPT') {
+    rewriteScope = 'FULL_SCRIPT';
+  }
+  // If rewrite_scope is "" or missing and approved, leave it undefined
+
   const failedSegments = Array.isArray(obj.failed_segments)
     ? (obj.failed_segments as unknown[]).map((n) => Number(n)).filter((n) => !isNaN(n) && n >= 1 && n <= 7)
     : undefined;

@@ -78,7 +78,7 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 {
   "approval_status": "APPROVED" | "REJECTED",
   "has_feedback": true | false,
-  "rewrite_scope": "FULL_SCRIPT" | "SEGMENTS",
+  "rewrite_scope": "" | "FULL_SCRIPT" | "SEGMENTS",
   "failed_segments": [1, 3],
   "stories": [
     {
@@ -105,8 +105,16 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 
 ## ROUTING RULES
 
-- If all rewritten segments pass AND transitions are smooth → APPROVED, rewrite_scope: "FULL_SCRIPT", failed_segments: []
+- If all rewritten segments pass AND transitions are smooth → APPROVED, rewrite_scope: "", failed_segments: []
 - If rewritten segments still fail OR transitions are broken → REJECTED, rewrite_scope: "SEGMENTS", failed_segments: [story IDs that still fail]
-- If ≥4 segments fail OR cross-segment coherence is broken → REJECTED, rewrite_scope: "FULL_SCRIPT", failed_segments: []
+- If cross-segment coherence is broken (e.g. rewritten segments no longer connect to the rest of the script) → REJECTED, rewrite_scope: "FULL_SCRIPT", failed_segments: []
+
+## CRITICAL RULES
+
+- Set "has_feedback": true ONLY if either: (a) approval_status is "REJECTED", or (b) you have an observation that does NOT fall under any of the specific rules above but still matters for script quality. Do NOT set has_feedback for minor nitpicks.
+- Set "has_feedback": false if approval_status is "APPROVED" and you have no extra observations beyond the rule checklist.
+- If approval_status is "REJECTED", has_feedback MUST be true.
+- Include "rejection_reason" for EVERY FAIL rule. Be specific: quote the problematic text, explain why it fails, and say exactly what to change.
+- "rewriter_instructions" must be actionable enough that a writer can fix the draft without re-reading the criteria.
 `;
 }
