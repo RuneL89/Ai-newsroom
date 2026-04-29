@@ -4,8 +4,6 @@ import {
   Search,
   ClipboardCheck,
   PenTool,
-  ShieldCheck,
-  Wrench,
   CheckCircle,
   Headphones,
   Loader2,
@@ -23,8 +21,6 @@ const iconMap: Record<string, React.ElementType> = {
   FileEdit,
   FileCheck,
   Layers,
-  ShieldCheck,
-  Wrench,
   CheckCircle,
   Headphones,
 };

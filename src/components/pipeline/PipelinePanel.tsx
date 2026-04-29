@@ -21,8 +21,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     currentDraft: '',
     finalDraft: null,
     error: null,
-    factCheckLoops: 0,
-    finalCheckLoops: 0,
+    editorLoops: 0,
   });
 
   const runnerRef = useRef<PipelineRunner | null>(null);
@@ -95,11 +94,8 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
         </div>
 
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
-          {state.factCheckLoops > 0 && (
-            <span>Fact loops: {state.factCheckLoops}</span>
-          )}
-          {state.finalCheckLoops > 0 && (
-            <span>Final loops: {state.finalCheckLoops}</span>
+          {state.editorLoops > 0 && (
+            <span>Editor loops: {state.editorLoops}</span>
           )}
         </div>
       </div>

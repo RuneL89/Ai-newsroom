@@ -22,7 +22,7 @@ You configure:
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
-Then you hit **Run Full Pipeline**. Ten AI agents go to work:
+Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 
 | # | Agent | Status | What It Does |
 |---|---|---|---|
@@ -32,10 +32,7 @@ Then you hit **Run Full Pipeline**. Ten AI agents go to work:
 | 4 | **Segment Writer** | ✅ Real | Receives `failed_segments` list, reads only failing `TopicN.txt` files + adjacent segments for transition context. Rewrites **only** the failing segments |
 | 5 | **Segment Editor** | ✅ Real | Audits rewritten segments in context of adjacent segments. Checks transitions are smooth |
 | 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes back to Full Script Editor for cross-segment re-verify |
-| 7 | **Fact Checker** | ⏳ Stub | Verifies every claim against independent sources |
-| 8 | **Researcher (Fix)** | ⏳ Stub | If facts fail, finds replacements and provides repair instructions |
-| 9 | **Editor (Final)** | ⏳ Stub | Gives the final approval gate before audio production |
-| 10 | **Audio Producer** | ⏳ Stub | Strips XML tags, generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
+| 7 | **Audio Producer** | ⏳ Stub | Strips XML tags, generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
 
 Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, the **first draft** (for the Researcher), and the **structured audit** (for Editors). If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
@@ -45,7 +42,7 @@ Each agent streams its reasoning in real time. You can tap any stage to see exac
 
 ## The Pipeline
 
-The AI Newsroom pipeline is a state machine that orchestrates ten specialized agents. It runs fully automatically, handles rejection loops without limits, retries failed API calls up to 3 times before aborting, and writes every segment to individual files via `@capacitor/filesystem`.
+The AI Newsroom pipeline is a state machine that orchestrates seven specialized agents. It runs fully automatically, handles rejection loops without limits, retries failed API calls up to 3 times before aborting, and writes every segment to individual files via `@capacitor/filesystem`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -68,14 +65,12 @@ The AI Newsroom pipeline is a state machine that orchestrates ten specialized ag
            │                 │                                        │
            ▼                 ▼ rewrite_scope = FULL_SCRIPT            │
     ┌─────────────┐   ┌─────────────────┐                             │
-    │   Fact      │   │ Full Script     │  ← Rewrites entire script,  │
-    │  Checker    │   │ Writer          │     writes all segments     │
-    │  (Gate 2)   │   │                 │     back to files           │
+    │   Audio     │   │ Full Script     │  ← Rewrites entire script,  │
+    │  Producer   │   │ Writer          │     writes all segments     │
+    │  (Agent 6)  │   │                 │     back to files           │
     └──────┬──────┘   └──────┬──────────┘                             │
            │                 │                                         │
-           │                 └─────────────────────────────────────────┘
-           │
-           │  (skip if approved)
+           │  (if approved)  └─────────────────────────────────────────┘
            │
            ▼
     ┌─────────────────┐
@@ -97,22 +92,8 @@ The AI Newsroom pipeline is a state machine that orchestrates ten specialized ag
     │             │     full_script.txt. Routes back to Full Script Editor
     └──────┬──────┘     for cross-segment re-verify.
            │
-           ▼
-    ┌─────────────────┐
-    │   Editor        │  ← Final approval gate
-    │  (Final)        │
-    │  (Gate 3)       │
-    └──────┬──────────┘
+           │  (if approved)
            │
-           ├────────────┬─────────────────────────────────────────────┐
-           │            │                                             │
-           ▼            ▼ Rejected                                    │
-    ┌─────────────┐  ┌─────────────────┐                             │
-    │    Audio    │  │ Full Script     │  ← Rewrites per final       │
-    │  Producer   │  │ Writer          │     editor feedback         │
-    │  (Agent 6)  │  └──────┬──────────┘                             │
-    └──────┬──────┘         │                                         │
-           │                └─────────────────────────────────────────┘
            ▼
       ✅ COMPLETE
 ```
@@ -131,13 +112,6 @@ The AI Newsroom pipeline is a state machine that orchestrates ten specialized ag
 - If approved, an **Assembler** concatenates all segments into `full_script.txt` and routes back to Full Script Editor for cross-segment re-verify.
 - If rejected, the loop returns to Segment Writer with updated feedback.
 
-**Fact Checker → Fixer → Full Script Writer loop:**
-- Fact Checker verifies claims. If issues are found, the Fixer finds replacements and sends repair instructions to the Full Script Writer.
-- Full Script Writer applies fixes and returns to Fact Checker for re-verification.
-
-**Editor (Final) → Full Script Writer loop:**
-- Final Editor gives the last quality gate. If rejected, the Full Script Writer polishes again and resubmits.
-
 All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 
 **Key behaviors:**
@@ -145,6 +119,44 @@ All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 - **API failures retry 3 times** — then abort with a clear error
 - **Session context is ephemeral** — configuration exists only in memory for the current run; close the app and it disappears
 - **Segment files persist** — Every segment is written to `Directory.Data/newsroom/` via `@capacitor/filesystem`. Even if the app closes mid-run, the files remain for inspection.
+
+### Editor Approval Rules
+
+Both editors use the same 7-rule checklist per story. A story **FAILS** if it violates **any** rule.
+
+| # | Rule | PASS Standard |
+|---|---|---|
+| 1 | **Length** | ≥2000 characters |
+| 2 | **Depth** | ≥3 distinct developments, events, or angles |
+| 3 | **Sentence structure** | ≥60% of sentences are 15–30 words; average >15 words |
+| 4 | **Accessibility** | Zero-knowledge listener can follow without Googling. Every term, acronym, organization defined on first mention |
+| 5 | **Forward close** | Ends with "what to watch" or "what happens next" |
+| 6 | **Source attribution** | Specific sources cited by name in the text |
+| 7 | **Geography** | Local themes = only chosen-country stories; Continent themes = only continent-country stories |
+
+**Full Script Editor approval:**
+- ALL 7 rules PASS on ALL stories (1–6, plus 7 if editorial segment enabled)
+- No missing segments (intro, topic1–6, outro all present)
+- Cross-segment transitions flow naturally
+- `approval_status`: `"APPROVED"`, `has_feedback`: `false`, `rewrite_scope`: `""`
+- `rewriter_instructions`: `"All requirements passed. No changes needed."`
+
+**Full Script Editor rejection:**
+- ≥4 stories fail → `rewrite_scope`: `"FULL_SCRIPT"`
+- 1–3 stories fail → `rewrite_scope`: `"SEGMENTS"`, `failed_segments`: `[story IDs]`
+- Any segment missing OR cross-segment coherence broken → `rewrite_scope`: `"FULL_SCRIPT"`
+- `approval_status`: `"REJECTED"`, `has_feedback`: `true`
+- `rewriter_instructions`: Specific, actionable fixes per failing story
+
+**Segment Editor approval:**
+- ALL rewritten segments PASS their 7 rules
+- Transitions to adjacent segments are smooth (tone, register, vocabulary match)
+- `approval_status`: `"APPROVED"`, `has_feedback`: `false`, `rewrite_scope`: `""`
+
+**Segment Editor rejection:**
+- Rewritten segments still fail → `rewrite_scope`: `"SEGMENTS"`, `failed_segments`: `[still-failing story IDs]`
+- Cross-segment coherence broken (rewritten segments no longer connect to the rest of the script) → `rewrite_scope`: `"FULL_SCRIPT"`
+- `approval_status`: `"REJECTED"`, `has_feedback`: `true`
 
 ### Agent Contracts
 
@@ -263,11 +275,8 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   │   ├── segmentWriter.ts       # Segment Writer — targeted rewrite of failing segments only
 │   │   ├── segmentEditor.ts       # Segment Editor — audits rewritten segments + transitions
 │   │   ├── assembler.ts           # Assembler — pure code concatenation of segments into full_script.txt
-│   │   ├── stubs/                 # Configurable stub agents for pipeline testing
-│   │   │   ├── agent5Stub.ts
-│   │   │   ├── gate2Stub.ts
-│   │   │   ├── gate3Stub.ts
-│   │   │   └── stubConfig.ts
+│   │   ├── stubs/                 # Stub agents for pipeline testing (Audio Producer)
+│   │   │   └── agent6Stub.ts
 │   │   └── index.ts               # Agent map factory
 │   ├── components/           # React UI components
 │   │   ├── pipeline/         # Pipeline UI components

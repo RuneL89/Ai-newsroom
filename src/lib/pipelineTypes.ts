@@ -7,9 +7,6 @@ export type StageId =
   | 'segmentWriter'
   | 'segmentEditor'
   | 'assembler'
-  | 'gate2'
-  | 'agent5'
-  | 'gate3'
   | 'agent6';
 
 export type StageStatus = 'pending' | 'running' | 'completed' | 'rejected' | 'error';
@@ -59,8 +56,7 @@ export interface PipelineState {
   currentDraft: string;
   finalDraft: string | null;
   error: string | null;
-  factCheckLoops: number;
-  finalCheckLoops: number;
+  editorLoops: number;
 }
 
 export interface PipelineCallbacks {
@@ -76,9 +72,6 @@ export interface AgentMap {
   segmentWriter: AgentFn;
   segmentEditor: AgentFn;
   assembler: AgentFn;
-  gate2: AgentFn;
-  agent5: AgentFn;
-  gate3: AgentFn;
   agent6: AgentFn;
 }
 
@@ -116,8 +109,5 @@ export const STAGE_DEFINITIONS: Omit<StageRecord, 'status' | 'iteration' | 'reas
   { id: 'segmentWriter', name: 'Segment Writer', shortName: 'Seg Write', icon: 'FileEdit' },
   { id: 'segmentEditor', name: 'Segment Editor', shortName: 'Seg Edit', icon: 'FileCheck' },
   { id: 'assembler', name: 'Assembler', shortName: 'Assemble', icon: 'Layers' },
-  { id: 'gate2', name: 'Fact Checker', shortName: 'Fact', icon: 'ShieldCheck' },
-  { id: 'agent5', name: 'Researcher (Fix)', shortName: 'Fix', icon: 'Wrench' },
-  { id: 'gate3', name: 'Editor (Final)', shortName: 'Final', icon: 'CheckCircle' },
   { id: 'agent6', name: 'Audio Producer', shortName: 'Audio', icon: 'Headphones' },
 ];
