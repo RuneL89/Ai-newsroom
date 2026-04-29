@@ -22,17 +22,20 @@ You configure:
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
-Then you hit **Run Full Pipeline**. Seven AI agents go to work:
+Then you hit **Run Full Pipeline**. Ten AI agents go to work:
 
 | # | Agent | Status | What It Does |
 |---|---|---|---|
-| 1 | **Researcher** | ✅ Real | Queries Brave Search for local + continent news across your 3 topics, builds the first draft script with music cues and editorial framing |
-| 2 | **Editor (Phase 1)** | ✅ Real | Evaluates all 6 themes + optional editorial segment against 19 structured rules. Returns per-theme PASS/FAIL audit with `rewriter_instructions` |
-| 3 | **Writer** | ✅ Real | Receives editor feedback, rewrites the full script preserving structure and cues. Goes back to Editor for re-evaluation |
-| 4 | **Fact Checker** | ⏳ Stub | Verifies every claim against independent sources |
-| 5 | **Researcher (Fix)** | ⏳ Stub | If facts fail, finds replacements and provides repair instructions |
-| 6 | **Editor (Final)** | ⏳ Stub | Gives the final approval gate before audio production |
-| 7 | **Audio Producer** | ⏳ Stub | Generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
+| 1 | **Researcher** | ✅ Real | Queries Brave Search for local + continent news across your 3 topics, writes the first draft as XML segments (`intro.txt`, `Topic1-6.txt`, `outro.txt`) with music cues and editorial framing |
+| 2 | **Full Script Editor** | ✅ Real | Evaluates all 6 themes + optional editorial segment against structured rules. Decides `rewrite_scope`: `FULL_SCRIPT` (≥4 failures) or `SEGMENTS` (1-3 failures). Returns per-theme PASS/FAIL audit |
+| 3 | **Full Script Writer** | ✅ Real | Receives editor feedback, rewrites the **entire** script, parses XML segments, writes them back to files |
+| 4 | **Segment Writer** | ✅ Real | Receives `failed_segments` list, reads only failing `TopicN.txt` files + adjacent segments for transition context. Rewrites **only** the failing segments |
+| 5 | **Segment Editor** | ✅ Real | Audits rewritten segments in context of adjacent segments. Checks transitions are smooth |
+| 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes back to Full Script Editor for cross-segment re-verify |
+| 7 | **Fact Checker** | ⏳ Stub | Verifies every claim against independent sources |
+| 8 | **Researcher (Fix)** | ⏳ Stub | If facts fail, finds replacements and provides repair instructions |
+| 9 | **Editor (Final)** | ⏳ Stub | Gives the final approval gate before audio production |
+| 10 | **Audio Producer** | ⏳ Stub | Strips XML tags, generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
 
 Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, the **first draft** (for the Researcher), and the **structured audit** (for Editors). If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
@@ -42,7 +45,7 @@ Each agent streams its reasoning in real time. You can tap any stage to see exac
 
 ## The Pipeline
 
-The AI Newsroom pipeline is a state machine that orchestrates seven specialized agents. It runs fully automatically, handles rejection loops without limits, and retries failed API calls up to 3 times before aborting.
+The AI Newsroom pipeline is a state machine that orchestrates ten specialized agents. It runs fully automatically, handles rejection loops without limits, retries failed API calls up to 3 times before aborting, and writes every segment to individual files via `@capacitor/filesystem`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -50,61 +53,90 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
 └─────────────────────────────────────────────────────────────────────────┘
 
     ┌─────────────┐
-    │  Researcher │  ← Queries Brave Search, writes first draft
-    │   (Agent 1) │
+    │  Researcher │  ← Queries Brave Search, writes first draft as
+    │   (Agent 1) │     XML segments → files (intro.txt, Topic1-6.txt, outro.txt)
     └──────┬──────┘
            │
            ▼
-    ┌─────────────┐
-    │   Editor    │  ← Evaluates 6 themes + editorial segment
-    │  (Phase 1)  │     Returns per-theme PASS/FAIL audit
-    │   (Gate 1)  │
-    └──────┬──────┘
+    ┌─────────────────┐
+    │ Full Script     │  ← Evaluates 6 themes + editorial segment
+    │ Editor          │     Decides rewrite_scope: FULL_SCRIPT or SEGMENTS
+    │ (Gate 1)        │
+    └──────┬──────────┘
            │
-           ├────────────┬────────────────────────────────────┐
-           │            │                                    │
-           ▼            ▼ Has feedback / Rejected           │
-    ┌─────────────┐  ┌─────────────┐                        │
-    │   Fact      │  │   Writer    │  ← Rewrites per audit  │
-    │  Checker    │  │  (Agent 3)  │     feedback, then     │
-    │  (Gate 2)   │  └──────┬──────┘     returns to Editor   │
-    └──────┬──────┘         │            for re-evaluation   │
-           │                │                               │
-    (skip) │                └───────────────────────────────┘
+           ├─────────────────┬────────────────────────────────────────┐
+           │                 │                                        │
+           ▼                 ▼ rewrite_scope = FULL_SCRIPT            │
+    ┌─────────────┐   ┌─────────────────┐                             │
+    │   Fact      │   │ Full Script     │  ← Rewrites entire script,  │
+    │  Checker    │   │ Writer          │     writes all segments     │
+    │  (Gate 2)   │   │                 │     back to files           │
+    └──────┬──────┘   └──────┬──────────┘                             │
+           │                 │                                         │
+           │                 └─────────────────────────────────────────┘
+           │
+           │  (skip if approved)
            │
            ▼
-    ┌─────────────┐
-    │   Editor    │  ← Final approval gate
-    │  (Final)    │
-    │  (Gate 3)   │
-    └──────┬──────┘
+    ┌─────────────────┐
+    │ Segment Writer  │  ← Reads failing TopicN.txt + adjacent segments
+    │                 │     Rewrites ONLY failing segments
+    └──────┬──────────┘
            │
-           ├────────────┬────────────────────────────────────┐
-           │            │                                    │
-           ▼            ▼ Rejected                           │
-    ┌─────────────┐  ┌─────────────┐                        │
-    │    Audio    │  │   Writer    │  ← Rewrites per final  │
-    │  Producer   │  │  (Agent 3)  │     editor feedback,   │
-    │  (Agent 6)  │  └──────┬──────┘     returns to Editor   │
-    └──────┬──────┘         │                               │
-           │                └───────────────────────────────┘
+           ▼
+    ┌─────────────────┐
+    │ Segment Editor  │  ← Audits rewritten segments + transitions
+    │                 │
+    └──────┬──────────┘
+           │
+           ├────────┬─────────────────────────────────────────────────┐
+           │        │                                                 │
+           ▼        ▼ Rejected                                        │
+    ┌─────────────┐  └─────────────────────────────────────────────────┘
+    │  Assembler  │  ← Pure code: concatenates all segments into
+    │             │     full_script.txt. Routes back to Full Script Editor
+    └──────┬──────┘     for cross-segment re-verify.
+           │
+           ▼
+    ┌─────────────────┐
+    │   Editor        │  ← Final approval gate
+    │  (Final)        │
+    │  (Gate 3)       │
+    └──────┬──────────┘
+           │
+           ├────────────┬─────────────────────────────────────────────┐
+           │            │                                             │
+           ▼            ▼ Rejected                                    │
+    ┌─────────────┐  ┌─────────────────┐                             │
+    │    Audio    │  │ Full Script     │  ← Rewrites per final       │
+    │  Producer   │  │ Writer          │     editor feedback         │
+    │  (Agent 6)  │  └──────┬──────────┘                             │
+    └──────┬──────┘         │                                         │
+           │                └─────────────────────────────────────────┘
            ▼
       ✅ COMPLETE
 ```
 
 ### Rejection Loops
 
-**Editor (Phase 1) ↔ Writer loop:**
-- Editor audits the draft. If it finds ANY issues (`has_feedback=true`) or rejects outright, the draft goes to the Writer with specific `rewriter_instructions`.
-- Writer rewrites the full script addressing every feedback point, then sends it **back to Editor (Phase 1)** for re-evaluation.
-- This loop continues until the Editor returns `APPROVED` with `has_feedback=false` — at which point the Writer is skipped entirely and the draft proceeds to Fact Checker.
+**Full Script Editor → Full Script Writer loop (FULL_SCRIPT):**
+- Full Script Editor audits the draft. If ≥4 themes fail, any segment is missing, or cross-segment coherence is broken, it sets `rewrite_scope: "FULL_SCRIPT"`.
+- Full Script Writer receives the entire script + `rewriter_instructions`, rewrites everything top-to-bottom, parses XML segments, and writes all files back.
+- The draft goes **back to Full Script Editor** for re-evaluation.
 
-**Fact Checker → Fixer → Writer loop:**
-- Fact Checker verifies claims. If issues are found, the Fixer finds replacements and sends repair instructions to the Writer.
-- Writer applies fixes and returns to Fact Checker for re-verification.
+**Full Script Editor → Segment Writer → Segment Editor loop (SEGMENTS):**
+- If only 1-3 themes fail and all segments exist with intact transitions, the Editor sets `rewrite_scope: "SEGMENTS"` and lists `failed_segments: [1, 3]`.
+- Segment Writer reads **only** the failing `TopicN.txt` files + adjacent segments for transition context. It rewrites **only** those segments, leaving approved segments untouched.
+- Segment Editor audits the rewritten segments in context of their neighbors, checking transitions are smooth.
+- If approved, an **Assembler** concatenates all segments into `full_script.txt` and routes back to Full Script Editor for cross-segment re-verify.
+- If rejected, the loop returns to Segment Writer with updated feedback.
 
-**Editor (Final) → Writer loop:**
-- Final Editor gives the last quality gate. If rejected, the Writer polishes again and resubmits.
+**Fact Checker → Fixer → Full Script Writer loop:**
+- Fact Checker verifies claims. If issues are found, the Fixer finds replacements and sends repair instructions to the Full Script Writer.
+- Full Script Writer applies fixes and returns to Fact Checker for re-verification.
+
+**Editor (Final) → Full Script Writer loop:**
+- Final Editor gives the last quality gate. If rejected, the Full Script Writer polishes again and resubmits.
 
 All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 
@@ -112,7 +144,7 @@ All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 - **Rejection loops have no limit** — the pipeline prioritizes correctness over speed
 - **API failures retry 3 times** — then abort with a clear error
 - **Session context is ephemeral** — configuration exists only in memory for the current run; close the app and it disappears
-- **All agents work from the same draft** — revisions are applied to the current version, never from scratch
+- **Segment files persist** — Every segment is written to `Directory.Data/newsroom/` via `@capacitor/filesystem`. Even if the app closes mid-run, the files remain for inspection.
 
 ### Agent Contracts
 
@@ -186,7 +218,7 @@ The pipeline UI is designed for phones:
 | Maps | Leaflet |
 | Build | Vite |
 | Mobile | Capacitor (Android APK) |
-| Storage | `@capacitor/preferences` (Android SharedPreferences) |
+| Storage | `@capacitor/preferences` (settings), `@capacitor/filesystem` (segment files in `Directory.Data/newsroom/`) |
 | News Search | Brave Search API (web search with `freshness` filtering) |
 | LLM API | OpenAI-compatible `/chat/completions` (SSE streaming) |
 | CI/CD | GitHub Actions |
@@ -223,17 +255,20 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   └── ...
 ├── src/
 │   ├── agents/               # Agent implementations
-│   │   ├── agent1.ts         # News Researcher — real Brave Search + LLM implementation
-│   │   ├── agent1Parse.ts    # Output parser for Agent 1 (6 theme sections)
-│   │   ├── agent3.ts         # Writer — real LLM rewrite with editor feedback
-│   │   ├── gate1.ts          # Editor Phase 1 — real LLM audit with structured JSON output
-│   │   ├── gate1Parse.ts     # JSON parser for Editor audit results
-│   │   ├── stubs/            # Configurable stub agents for pipeline testing
+│   │   ├── agent1.ts              # News Researcher — real Brave Search + LLM, writes XML segments to files
+│   │   ├── agent1Parse.ts         # Output parser for Agent 1 (6 theme sections)
+│   │   ├── fullScriptWriter.ts    # Full Script Writer — rewrites entire script, writes all segments
+│   │   ├── fullScriptEditor.ts    # Full Script Editor — audits full script, decides FULL_SCRIPT vs SEGMENTS routing
+│   │   ├── fullScriptEditorParse.ts  # JSON parser for audit results (rewrite_scope, failed_segments)
+│   │   ├── segmentWriter.ts       # Segment Writer — targeted rewrite of failing segments only
+│   │   ├── segmentEditor.ts       # Segment Editor — audits rewritten segments + transitions
+│   │   ├── assembler.ts           # Assembler — pure code concatenation of segments into full_script.txt
+│   │   ├── stubs/                 # Configurable stub agents for pipeline testing
 │   │   │   ├── agent5Stub.ts
 │   │   │   ├── gate2Stub.ts
 │   │   │   ├── gate3Stub.ts
 │   │   │   └── stubConfig.ts
-│   │   └── index.ts          # Agent map factory
+│   │   └── index.ts               # Agent map factory
 │   ├── components/           # React UI components
 │   │   ├── pipeline/         # Pipeline UI components
 │   │   │   ├── PipelinePanel.tsx
@@ -257,15 +292,21 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   ├── lib/                  # Core logic
 │   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, Brave key storage
 │   │   ├── newsSearch.ts     # Brave Search API wrapper with fallback chain
-│   │   ├── pipeline.ts       # Pipeline runner state machine
-│   │   ├── pipelineTypes.ts  # Pipeline type definitions
+│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, Brave key storage
+│   │   ├── fileManager.ts    # File I/O via @capacitor/filesystem (segment files, full_script.txt)
+│   │   ├── newsSearch.ts     # Brave Search API wrapper with fallback chain
+│   │   ├── pipeline.ts       # Pipeline runner state machine with FULL_SCRIPT / SEGMENTS routing
+│   │   ├── pipelineTypes.ts  # Pipeline type definitions (AuditResult with rewrite_scope, failed_segments)
+│   │   ├── scriptParser.ts   # XML segment parser, assembler, tag stripper for TTS
 │   │   ├── sessionConfig.ts  # SessionConfig builder & formatter
 │   │   └── utils.ts
 │   ├── prompts/
-│   │   ├── agent1.ts         # Agent 1 prompt builder — injects SessionConfig + requirements + bias
-│   │   ├── agent3.ts         # Writer prompt builder — current draft + editor feedback + rewrite instructions
-│   │   ├── gate1.ts          # Editor prompt builder — per-theme audit criteria + editorial segment checks
-│   │   └── shared/           # Permanent, session-independent prompt building blocks
+│   │   ├── agent1.ts              # Agent 1 prompt builder — XML segment output instructions
+│   │   ├── fullScriptWriter.ts    # Full Script Writer prompt — preserve XML tags, rewrite everything
+│   │   ├── fullScriptEditor.ts    # Full Script Editor prompt — per-theme audit + rewrite_scope routing
+│   │   ├── segmentWriter.ts       # Segment Writer prompt — rewrite only failing segments + transition context
+│   │   ├── segmentEditor.ts       # Segment Editor prompt — audit rewritten segments + transition checks
+│   │   └── shared/                # Permanent, session-independent prompt building blocks
 │   │       └── completenessRequirements.ts
 │   ├── App.tsx               # Main application component with tab router
 │   ├── index.css
