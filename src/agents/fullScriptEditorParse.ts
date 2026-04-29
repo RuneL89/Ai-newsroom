@@ -42,8 +42,8 @@ export function parseFullScriptEditorOutput(raw: string): AuditResult {
     throw new Error('Full Script Editor output missing rewriter_instructions');
   }
 
-  // Normalize has_feedback
-  const hasFeedback = obj.has_feedback === true || obj.approval_status === 'REJECTED';
+  // has_feedback must strictly match approval_status
+  const hasFeedback = obj.approval_status === 'REJECTED';
 
   // Validate each story
   const stories = obj.stories.map((story: unknown, idx: number) => {

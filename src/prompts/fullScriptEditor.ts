@@ -147,11 +147,10 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 
 ## CRITICAL RULES
 
-- Set "has_feedback": true ONLY if either: (a) approval_status is "REJECTED", or (b) you have an observation that does NOT fall under any of the specific rules above but still matters for script quality. Do NOT set has_feedback for minor nitpicks.
-- Set "has_feedback": false if approval_status is "APPROVED" and you have no extra observations beyond the rule checklist.
-- If approval_status is "REJECTED", has_feedback MUST be true.
+- "has_feedback" MUST match approval_status exactly: "APPROVED" → false, "REJECTED" → true. No exceptions.
 - Include "rejection_reason" for EVERY FAIL rule. Be specific: quote the problematic text, explain why it fails, and say exactly what to change.
-- "rewriter_instructions" must be actionable enough that a writer can fix the draft without re-reading the criteria.
+- "rewriter_instructions" is your catch-all for any feedback that does NOT fit the specific rules above (e.g. "Add a stronger bridge between Topic 2 and Topic 3", "The sign-off feels abrupt"). It must be actionable enough that a writer can fix the draft without re-reading the criteria.
+- If all rules pass and you have no extra observations, set rewriter_instructions to "All requirements passed. No changes needed."
 - There must be exactly ${editorialStoryCount} stories in the output (6 themes${hasEditorialSegment ? ' + 1 editorial segment' : ''}).
 `;
 }
