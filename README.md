@@ -28,9 +28,9 @@ Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 |---|---|---|---|
 | 1 | **Researcher** | ✅ Real | Queries Brave Search for local + continent news across your 3 topics, writes the first draft as XML segments (`intro.txt`, `Topic1-6.txt`, `outro.txt`) with music cues and editorial framing |
 | 2 | **Full Script Editor** | ✅ Real | Checks script-wide coherence, bias consistency, and structural completeness (all segments present). Binary pass/fail — no per-theme audit. Runs twice: once after Researcher, once after Assembler. |
-| 3 | **Full Script Writer** | ✅ Real | Receives editor feedback, rewrites the **entire** script, parses XML segments, writes them back to files |
-| 4 | **Segment Writer** | ✅ Real | Rewrites one topic at a time in the sequential topic loop. Reads target segment + adjacent segments for transition context. |
-| 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the sequential topic loop. Evaluates only the 7 topic-level requirements (Length, Depth, Sentence structure, Accessibility, Forward close, Source attribution, Geography). |
+| 3 | **Full Script Writer** | ✅ Real | Receives script-wide feedback, fixes ONLY coherence/bias/structural issues. Explicitly preserves all topic segment content (which has already passed individual audit). Rewrites intro, outro, transitions, and bias framing only. |
+| 4 | **Segment Writer** | ✅ Real | Called ONLY when a topic fails Segment Editor audit. Rewrites one topic at a time. Reads target segment + adjacent segments for transition context. |
+| 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the sequential topic loop (starts first — topics already exist from Researcher). Evaluates only the 7 topic-level requirements. Reads the individual `topicN.txt` file, NOT `full_script.txt`. |
 | 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes to Full Script Editor for second-pass coherence/bias verification. |
 | 7 | **Audio Producer** | ⏳ Stub | Strips XML tags, generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
 
@@ -65,12 +65,13 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
            ▼              ▼
     ┌─────────────┐   ┌─────────────────────────────────────────┐
     │ Full Script │   │  SEQUENTIAL TOPIC LOOP (topic 1 → 7)    │
-    │ Writer      │   │  ┌─────────────┐  ┌─────────────────┐   │
-    │             │   │  │ Segment     │→ │ Segment Editor  │   │
-    │ (rewrites   │   │  │ Writer      │   │ (7 rules only)  │   │
-    │  entire     │   │  │ (1 topic)   │← │ Rejected → loop │   │
-    │  script)    │   │  └─────────────┘   │ Approved → next │   │
-    └──────┬──────┘   │                    └─────────────────┘   │
+    │ Writer      │   │  ┌─────────────────┐  ┌─────────────┐   │
+    │             │   │  │ Segment Editor  │→ │ Segment     │   │
+    │ (fixes      │   │  │ (7 rules only)  │   │ Writer      │   │
+    │  script-    │   │  │ Reads topicN.txt│← │ (1 topic)   │   │
+    │  wide only) │   │  └─────────────────┘   │ Rejected →  │   │
+    └──────┬──────┘   │      │ Approved → next  │ loop back   │   │
+           │          │      └──────────────────┘ to Editor   │   │
            │          └─────────────────────────────────────────┘
            └──────────────────────────────────────────────┐
                                                             │
@@ -105,16 +106,16 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
 - If ANY issue is found, it rejects and the Full Script Writer receives the entire script + `rewriter_instructions`, rewrites everything top-to-bottom, parses XML segments, and writes all files back.
 - The draft goes **back to Full Script Editor (Pass 1)** for re-evaluation.
 
-**Sequential Topic Loop (Segment Writer → Segment Editor):**
+**Sequential Topic Loop (Segment Editor → Segment Writer):**
 - After Full Script Editor (Pass 1) approves, the pipeline enters a sequential per-topic loop: topic 1 → topic 2 → ... → topic 7.
-- For each topic, the Segment Writer reads the target segment + adjacent segments for transition context, then rewrites only that segment.
-- The Segment Editor audits **only** that topic against the 7 topic-level rules (Length, Depth, Sentence structure, Accessibility, Forward close, Source attribution, Geography).
-- If rejected, the loop stays on the **same topic** until it passes.
-- If approved, the loop advances to the **next topic**.
+- For each topic, the **Segment Editor runs first** — it reads the individual `topicN.txt` file (NOT `full_script.txt`) and audits it against the 7 topic-level rules.
+- If the topic **passes**, the loop advances to the **next topic** — no writer is called.
+- If the topic **fails**, the Segment Writer is called. It reads the target segment + adjacent segments for transition context, rewrites only that segment, and writes it back.
+- The Segment Editor then **re-audits the same topic**. If it passes, the loop advances. If it still fails, the loop stays on the same topic.
 
 **Full Script Editor → Full Script Writer loop (Pass 2):**
 - After all topics pass and the Assembler concatenates segments, the Full Script Editor runs a **second pass** to verify that the per-topic rewrites did not break script-wide coherence or bias.
-- If rejected, the Full Script Writer rewrites the entire script, and the Full Script Editor re-audits. If approved, the **entire topic loop re-runs from topic 1** (Option A — full re-loop for safety).
+- If rejected, the Full Script Writer fixes the script-wide issues while explicitly preserving all topic segment content. The Full Script Editor re-audits. If approved, the **entire topic loop re-runs from topic 1** (Option A — full re-loop for safety).
 - If approved, the pipeline proceeds to the Audio Producer.
 
 All loops are **unbounded** — the pipeline prioritizes correctness over speed.
