@@ -59,6 +59,7 @@ export interface PipelineState {
   error: string | null;
   editorLoops: number;
   segmentLoopIndex: number;
+  hasRunTopicLoop: boolean;
 }
 
 export interface PipelineCallbacks {

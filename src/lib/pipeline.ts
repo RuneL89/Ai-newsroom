@@ -35,6 +35,7 @@ function createInitialState(): PipelineState {
     error: null,
     editorLoops: 0,
     segmentLoopIndex: -1,
+    hasRunTopicLoop: false,
   };
 }
 
@@ -284,10 +285,12 @@ export class PipelineRunner {
         }
         // APPROVED: first pass (segmentLoopIndex === -1) → start topic loop
         // APPROVED: second pass (segmentLoopIndex !== -1) → done
-        if (this.state.segmentLoopIndex === -1) {
+        if (!this.state.hasRunTopicLoop) {
+          // Pass 1: start topic loop
           this.updateState({ segmentLoopIndex: 0 });
           return 'segmentEditor';
         }
+        // Pass 2: done
         return 'agent6';
       }
 
@@ -316,8 +319,8 @@ export class PipelineRunner {
       }
 
       case 'assembler': {
-        // Reset segment loop for second fullScriptEditor pass
-        this.updateState({ segmentLoopIndex: -1 });
+        // Reset segment loop and flag for second fullScriptEditor pass
+        this.updateState({ segmentLoopIndex: -1, hasRunTopicLoop: true });
         return 'fullScriptEditor';
       }
 
