@@ -6,7 +6,7 @@ import type { SegmentId } from '../lib/fileManager';
 export function buildSegmentWriterPrompt(
   config: SessionConfig,
   contextSegments: Record<SegmentId, string>,
-  targetSegmentIds: SegmentId[],
+  targetSegmentId: SegmentId,
   rewriterInstructions: string,
   _iteration: number = 1
 ): string {
@@ -15,7 +15,7 @@ export function buildSegmentWriterPrompt(
   // Build segment context block
   const segmentBlocks = Object.entries(contextSegments)
     .map(([id, content]) => {
-      const isTarget = targetSegmentIds.includes(id as SegmentId);
+      const isTarget = id === targetSegmentId;
       const label = isTarget ? '**REWRITE THIS SEGMENT**' : '**READ-ONLY (for transition context)**';
       return `### ${label} — ${id}
 \`\`\`
@@ -25,31 +25,31 @@ ${content}
     .join('\n\n');
 
   return `## ROLE
-You are a senior podcast scriptwriter specializing in targeted segment rewrites. You rewrite ONLY the specified failing segments while preserving all approved segments exactly as written.
+You are a senior podcast scriptwriter specializing in targeted segment rewrites. You rewrite ONLY the specified segment while preserving all other segments exactly as written.
 
 ${formatSessionContextForLLM(config)}
 
 ## EDITORIAL FEEDBACK
 
-The Full Script Editor identified issues in specific segments. You MUST address every point:
+The Segment Editor identified issues in the target segment. You MUST address every point:
 
 \`\`\`
 ${rewriterInstructions}
 \`\`\`
 
-## SEGMENTS TO REWRITE
+## SEGMENT TO REWRITE
 
-The following segments need rewriting: ${targetSegmentIds.join(', ')}
+The following segment needs rewriting: ${targetSegmentId}
 
-## CONTEXT (all segments for transition continuity)
+## CONTEXT (adjacent segments for transition continuity)
 
 ${segmentBlocks}
 
 ## YOUR TASK
 
-1. Rewrite ONLY the segments marked "REWRITE THIS SEGMENT".
+1. Rewrite ONLY the segment marked "REWRITE THIS SEGMENT".
 2. Do NOT modify segments marked "READ-ONLY".
-3. Ensure transitions between rewritten segments and their adjacent read-only segments flow naturally.
+3. Ensure transitions between the rewritten segment and its adjacent read-only segments flow naturally.
 4. Maintain the same music cues, source attributions, and editorial perspective.
 
 ### What to improve:
@@ -63,15 +63,11 @@ ${biasInstructions}
 
 ## OUTPUT FORMAT
 
-Return ONLY the rewritten segments, each wrapped in XML tags exactly like this:
+Return ONLY the rewritten segment, wrapped in XML tags exactly like this:
 
 \`\`\`
-<segment id="topic1" topic="${config.content.topics[0]}">
-[rewritten content for topic1]
-</segment>
-
-<segment id="topic2" topic="${config.content.topics[1]}">
-[rewritten content for topic2]
+<segment id="${targetSegmentId}" topic="${config.content.topics[0]}">
+[rewritten content]
 </segment>
 \`\`\`
 

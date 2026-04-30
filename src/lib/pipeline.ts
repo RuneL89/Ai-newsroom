@@ -34,6 +34,7 @@ function createInitialState(): PipelineState {
     finalDraft: null,
     error: null,
     editorLoops: 0,
+    segmentLoopIndex: -1,
   };
 }
 
@@ -41,6 +42,7 @@ export class PipelineRunner {
   private state: PipelineState;
   private callbacks: PipelineCallbacks;
   private agents: AgentMap;
+  private sessionConfig: SessionConfig | null = null;
   private abortController: AbortController | null = null;
 
   constructor(agents: AgentMap, callbacks: PipelineCallbacks) {
@@ -84,6 +86,7 @@ export class PipelineRunner {
     });
 
     try {
+      this.sessionConfig = sessionConfig;
       let stage: StageId = 'agent1';
       let draft = '';
       let feedback: unknown = undefined;
@@ -174,6 +177,7 @@ export class PipelineRunner {
       sessionConfig,
       currentDraft,
       iteration,
+      segmentLoopIndex: this.state.segmentLoopIndex,
       feedback,
     };
 
@@ -265,6 +269,7 @@ export class PipelineRunner {
     }
 
     const m = metadata as Record<string, unknown>;
+    const totalTopics = this.sessionConfig?.editorial.includeSegment ? 7 : 6;
 
     switch (current) {
       case 'agent1':
@@ -275,12 +280,13 @@ export class PipelineRunner {
           this.updateState({
             editorLoops: this.state.editorLoops + 1,
           });
-          // Route based on rewrite_scope
-          const rewriteScope = m.rewrite_scope;
-          if (rewriteScope === 'SEGMENTS' && Array.isArray(m.failed_segments) && (m.failed_segments as number[]).length > 0) {
-            return 'segmentWriter';
-          }
           return 'fullScriptWriter';
+        }
+        // APPROVED: first pass (segmentLoopIndex === -1) → start topic loop
+        // APPROVED: second pass (segmentLoopIndex !== -1) → done
+        if (this.state.segmentLoopIndex === -1) {
+          this.updateState({ segmentLoopIndex: 0 });
+          return 'segmentWriter';
         }
         return 'agent6';
       }
@@ -296,17 +302,24 @@ export class PipelineRunner {
           this.updateState({
             editorLoops: this.state.editorLoops + 1,
           });
-          const rewriteScope = m.rewrite_scope;
-          if (rewriteScope === 'SEGMENTS' && Array.isArray(m.failed_segments) && (m.failed_segments as number[]).length > 0) {
-            return 'segmentWriter';
-          }
-          return 'fullScriptWriter';
+          return 'segmentWriter';
+        }
+        // APPROVED: advance to next topic or finish loop
+        const maxIndex = totalTopics - 1;
+        if (this.state.segmentLoopIndex < maxIndex) {
+          this.updateState({
+            segmentLoopIndex: this.state.segmentLoopIndex + 1,
+          });
+          return 'segmentWriter';
         }
         return 'assembler';
       }
 
-      case 'assembler':
+      case 'assembler': {
+        // Reset segment loop for second fullScriptEditor pass
+        this.updateState({ segmentLoopIndex: -1 });
         return 'fullScriptEditor';
+      }
 
       case 'agent6':
         return 'COMPLETE';

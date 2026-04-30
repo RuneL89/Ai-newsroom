@@ -4,104 +4,87 @@ import type { SegmentId } from '../lib/fileManager';
 
 export function buildSegmentEditorPrompt(
   config: SessionConfig,
-  fullScript: string,
-  rewrittenSegmentIds: SegmentId[],
+  segmentContent: string,
+  targetSegmentId: SegmentId,
+  targetStoryId: number,
+  topicName: string,
   iteration: number = 1
 ): string {
-  const topicList = config.content.topics.join(', ');
-  const hasEditorialSegment = config.editorial.includeSegment;
+  const isEditorial = targetSegmentId === 'topic7';
+  const geographyLabel = targetStoryId <= 3
+    ? `Local themes = only ${config.geography.country.name} stories`
+    : `Continent themes = only ${config.geography.continent.name} countries with continent angle`;
 
-  // Map segment IDs to story IDs and topic names for the sequence
-  const segmentToStoryId: Record<string, number> = {
-    topic1: 1, topic2: 2, topic3: 3,
-    topic4: 4, topic5: 5, topic6: 6,
-    topic7: 7,
-  };
-
-  const rewrittenStories = rewrittenSegmentIds
-    .filter((id) => id !== 'intro' && id !== 'outro')
-    .map((id) => {
-      const storyId = segmentToStoryId[id] ?? 0;
-      const topicName = id === 'topic7'
-        ? 'Editorial'
-        : config.content.topics[(storyId - 1) % 3] ?? 'Unknown';
-      return { storyId, segmentId: id, topicName };
-    });
-
-  // Build the numbered evaluation steps
-  let stepNumber = 1;
-  const evaluationSteps: string[] = [];
-
-  for (const story of rewrittenStories) {
-    evaluationSteps.push(
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}, topic: ${story.topicName}) — **LENGTH**. Is it ≥2000 characters?`,
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **DEPTH**. Does it synthesize ≥3 distinct developments, events, or angles?`,
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **SENTENCE_STRUCTURE**. Are ≥60% of sentences 15-30 words? Is average >15 words?`,
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **ACCESSIBILITY**. Would a zero-knowledge listener follow without Googling? Are all terms defined on first mention?`,
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **FORWARD_CLOSE**. Does it end with "what to watch" or "what happens next"?`,
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **SOURCE_ATTRIBUTION**. Are specific sources cited by name in the text?`,
-      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **GEOGRAPHY**. Local themes = only ${config.geography.country.name} stories. Continent themes = only ${config.geography.continent.name} countries with continent angle.`
-    );
-  }
-
-  const finalStepStart = stepNumber;
-
-  const editorialStoryBlock = hasEditorialSegment
-    ? `    { "story_id": 7, "rules": [
+  const editorialRules = isEditorial
+    ? `    { "story_id": ${targetStoryId}, "rules": [
         { "rule_name": "EDITORIAL_SEGMENT_PRESENT", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
         { "rule_name": "EDITORIAL_SEGMENT_PLACEMENT", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
         { "rule_name": "EDITORIAL_SEGMENT_LENGTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
         { "rule_name": "EDITORIAL_SEGMENT_BIAS_INTENSITY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
         { "rule_name": "EDITORIAL_SEGMENT_ANALYSIS", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
         { "rule_name": "EDITORIAL_SEGMENT_CLOSURE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." }
-      ] },`
-    : '';
+      ] }`
+    : `    { "story_id": ${targetStoryId}, "rules": [
+        { "rule_name": "LENGTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
+        { "rule_name": "DEPTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
+        { "rule_name": "SENTENCE_STRUCTURE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
+        { "rule_name": "ACCESSIBILITY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
+        { "rule_name": "FORWARD_CLOSE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
+        { "rule_name": "SOURCE_ATTRIBUTION", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
+        { "rule_name": "GEOGRAPHY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." }
+      ] }`;
+
+  const evaluationSteps = isEditorial
+    ? `Step 1: Evaluate EDITORIAL SEGMENT — **PRESENT**. Does it exist and is it clearly labeled?
+Step 2: Evaluate EDITORIAL SEGMENT — **PLACEMENT**. Is it after the continent block and before the sign-off?
+Step 3: Evaluate EDITORIAL SEGMENT — **LENGTH**. Is it ≥2500 characters?
+Step 4: Evaluate EDITORIAL SEGMENT — **BIAS INTENSITY**. Is the ${config.editorial.biasLabel} perspective applied MORE prominently than in news themes?
+Step 5: Evaluate EDITORIAL SEGMENT — **ANALYSIS**. Does it connect and analyze themes from BOTH ${config.geography.country.name} and ${config.geography.continent.name}?
+Step 6: Evaluate EDITORIAL SEGMENT — **CLOSURE**. Does it provide closure and wrap up the podcast?`
+    : `Step 1: Evaluate Story ${targetStoryId} (${targetSegmentId}, topic: ${topicName}) — **LENGTH**. Is it ≥2000 characters?
+Step 2: Evaluate Story ${targetStoryId} (${targetSegmentId}) — **DEPTH**. Does it synthesize ≥3 distinct developments, events, or angles?
+Step 3: Evaluate Story ${targetStoryId} (${targetSegmentId}) — **SENTENCE_STRUCTURE**. Are ≥60% of sentences 15-30 words? Is average >15 words?
+Step 4: Evaluate Story ${targetStoryId} (${targetSegmentId}) — **ACCESSIBILITY**. Would a zero-knowledge listener follow without Googling? Are all terms defined on first mention?
+Step 5: Evaluate Story ${targetStoryId} (${targetSegmentId}) — **FORWARD_CLOSE**. Does it end with "what to watch" or "what happens next"?
+Step 6: Evaluate Story ${targetStoryId} (${targetSegmentId}) — **SOURCE_ATTRIBUTION**. Are specific sources cited by name in the text?
+Step 7: Evaluate Story ${targetStoryId} (${targetSegmentId}) — **GEOGRAPHY**. ${geographyLabel}.`;
 
   return `## ROLE
-You are a senior podcast editor performing a targeted segment audit. You evaluate ONLY the segments that were recently rewritten, but you assess them in the context of the full script to ensure transitions remain smooth.
+You are a senior podcast editor performing a focused topic audit. You evaluate ONLY the single topic segment provided below. You do NOT check transitions to other segments or bias consistency across the script — those are handled by the Full Script Editor.
 
 ${formatSessionContextForLLM(config)}
 
-## SEGMENTS REWRITTEN IN THIS ITERATION
-${rewrittenSegmentIds.join(', ')}
+## SEGMENT TO AUDIT (Iteration ${iteration})
 
-## FULL SCRIPT TO AUDIT (Iteration ${iteration})
-
-Themes 1-3 are LOCAL (${config.geography.country.name}) news.
-Themes 4-6 are ${config.geography.continent.name} continent news.
-${hasEditorialSegment ? 'Story 7 is the EDITORIAL SEGMENT.' : 'NO Editorial Segment should be present.'}
-
-Topics: ${topicList}
+${isEditorial ? 'Editorial Segment' : `Story ${targetStoryId} (${targetSegmentId}, topic: ${topicName})`}
 
 \`\`\`
-${fullScript}
+${segmentContent}
 \`\`\`
 
 ## EVALUATION SEQUENCE — FOLLOW THESE STEPS IN EXACT ORDER
 
-**CRITICAL: Work through each step sequentially. Do not skip steps. Do not go back to re-evaluate a previous step. Record your PASS/FAIL verdict for each step as you go, then move to the next.**
+**CRITICAL: Work through each step sequentially. Do not skip steps. Record your PASS/FAIL verdict for each step as you go, then move to the next.**
 
-For each step, ask the specific question, answer it, and record your verdict before proceeding.
+${evaluationSteps}
 
-${evaluationSteps.join('\n')}
+Step ${isEditorial ? 7 : 8}: Tally results and apply ROUTING RULES.
 
-Step ${finalStepStart}: Evaluate **TRANSITIONS** for all rewritten segments.
-- Does each rewritten segment transition smoothly from the preceding segment?
-- Does each rewritten segment transition smoothly to the following segment?
-- Is tone and register consistent with adjacent segments?
-- Are there any jarring shifts in style, vocabulary, or knowledge assumptions?
+## ROUTING RULES
 
-Step ${finalStepStart + 1}: Evaluate **BIAS CONSISTENCY** across the full script.
-- Does the rewritten segment maintain ${config.editorial.biasLabel} perspective?
-- Does the rewritten segment's framing, language, and source selection align with ${config.editorial.biasLabel}?
-- Is the bias intensity consistent with adjacent segments (not suddenly stronger or weaker)?
+You have exactly TWO possible outcomes. No third option. No escape hatch.
 
-Step ${finalStepStart + 2}: Count total FAILs across all evaluated stories.
-- If 0 FAILs AND transitions are smooth AND bias is consistent → APPROVED
-- If 1-3 stories still fail → REJECTED, rewrite_scope: "SEGMENTS", failed_segments: [story IDs that still fail]
-- If ≥4 stories fail OR transitions are broken OR bias is jarring → REJECTED, rewrite_scope: "FULL_SCRIPT", failed_segments: []
+**APPROVED** — Use ONLY when:
+- Every rule evaluated has 0 FAILs.
 
-Step ${finalStepStart + 3}: Build the JSON output.
+→ Set: approval_status: "APPROVED", has_feedback: false, rewrite_scope: "", failed_segments: []
+
+**REJECTED** — Use when ANY of the following is true:
+- One or more rules have ≥1 FAIL.
+
+→ Set: approval_status: "REJECTED", has_feedback: true, rewrite_scope: "SEGMENTS", failed_segments: [${targetStoryId}]
+
+Step ${isEditorial ? 8 : 9}: Build the JSON output.
 
 ## JSON OUTPUT FORMAT
 
@@ -111,28 +94,12 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 {
   "approval_status": "APPROVED" | "REJECTED",
   "has_feedback": true | false,
-  "rewrite_scope": "" | "FULL_SCRIPT" | "SEGMENTS",
-  "failed_segments": [1, 3],
+  "rewrite_scope": "" | "SEGMENTS",
+  "failed_segments": [${targetStoryId}],
   "stories": [
-    {
-      "story_id": 1,
-      "rules": [
-        { "rule_name": "LENGTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "DEPTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "SENTENCE_STRUCTURE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "ACCESSIBILITY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "FORWARD_CLOSE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "SOURCE_ATTRIBUTION", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "GEOGRAPHY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." }
-      ]
-    },
-    { "story_id": 2, "rules": [...] },
-    { "story_id": 3, "rules": [...] },
-    { "story_id": 4, "rules": [...] },
-    { "story_id": 5, "rules": [...] },
-    { "story_id": 6, "rules": [...] }${editorialStoryBlock}
+${editorialRules}
   ],
-  "rewriter_instructions": "Specific, actionable fixes per theme. Or: 'All requirements passed. No changes needed.'"
+  "rewriter_instructions": "Specific, actionable fixes. Or: 'All requirements passed. No changes needed.'"
 }
 \`\`\`
 

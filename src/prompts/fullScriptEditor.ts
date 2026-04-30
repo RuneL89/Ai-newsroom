@@ -9,40 +9,8 @@ export function buildFullScriptEditorPrompt(
   const topicList = config.content.topics.join(', ');
   const hasEditorialSegment = config.editorial.includeSegment;
 
-  const editorialSegmentAudit = hasEditorialSegment
-    ? `**EDITORIAL SEGMENT REQUIREMENTS:**
-
-The user selected "Include Editorial Segment". The draft MUST contain an Editorial Segment.
-
-- Exists, placed after the ${config.geography.continent.name} News block and before the sign-off
-- ≥2500 characters
-- ${config.editorial.biasLabel} perspective applied MORE prominently than in news themes
-- Analyzes and connects themes from BOTH ${config.geography.country.name} and ${config.geography.continent.name}
-- Provides closure and wraps up the podcast`
-    : `**EDITORIAL SEGMENT REQUIREMENTS:**
-
-The user did NOT select "Include Editorial Segment". The draft MUST NOT contain an Editorial Segment.
-
-- Confirm NO editorial segment exists between the continent block and sign-off`;
-
-  const editorialStoryBlock = hasEditorialSegment
-    ? `    { "story_id": 7, "rules": [
-        { "rule_name": "EDITORIAL_SEGMENT_PRESENT", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "EDITORIAL_SEGMENT_PLACEMENT", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "EDITORIAL_SEGMENT_LENGTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "EDITORIAL_SEGMENT_BIAS_INTENSITY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "EDITORIAL_SEGMENT_ANALYSIS", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "EDITORIAL_SEGMENT_CLOSURE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." }
-      ] },`
-    : '';
-
-  const editorialStoryCount = hasEditorialSegment ? '7' : '6';
-  const editorialTaskBlock = hasEditorialSegment
-    ? 'Check the Editorial Segment (story_id 7) against Editorial Segment Requirements.'
-    : 'Verify NO Editorial Segment exists.';
-
   return `## ROLE
-You are a senior podcast editor performing a Phase 1 editorial audit. Evaluate the draft against the criteria below and return a structured JSON verdict.
+You are a senior podcast editor performing a script-wide editorial audit. You evaluate ONLY global, cross-cutting issues — not individual topic quality. Return a structured JSON verdict.
 
 ${formatSessionContextForLLM(config)}
 
@@ -58,19 +26,15 @@ Topics: ${topicList}
 ${draft}
 \`\`\`
 
-## THEME REQUIREMENTS
+## STRUCTURAL CHECK
 
-Evaluate each theme (1-6) against these criteria. A theme FAILS if it violates any requirement.
+Verify the script has ALL required segments with intact XML tags:
+- <segment id="intro"> present and non-empty
+- <segment id="topic1" topic="..."> through <segment id="topic6" topic="..."> present and non-empty
+${hasEditorialSegment ? '- <segment id="topic7" topic="Editorial"> present and non-empty' : '- NO <segment id="topic7"> tag anywhere'}
+- <segment id="outro"> present and non-empty
 
-| # | Criterion | PASS standard | Typical FAIL |
-|---|---|---|---|
-| 1 | **Length** | ≥2000 characters | Under-length, superficial |
-| 2 | **Depth** | Synthesizes ≥3 distinct developments, events, or angles | Only 1-2 stories covered |
-| 3 | **Sentence structure** | ≥60% of sentences are 15-30 words. Average sentence length >15 words. | Too many short choppy or long rambling sentences |
-| 4 | **Accessibility** | Zero-knowledge listener can follow without Googling. Every term, acronym, organization defined on first mention. Historical context provided where relevant. | Assumes prior knowledge; undefined terms |
-| 5 | **Forward close** | Ends with "what to watch" or "what happens next" | Abrupt ending, no lookahead |
-| 6 | **Source attribution** | Specific sources cited by name in the text | Generic "reports say" with no source |
-| 7 | **Geography** | Local themes = only ${config.geography.country.name} stories. Continent themes = only ${config.geography.continent.name} countries with continent angle. | Wrong geography mixed in |
+If ANY segment is missing or empty, the script FAILS structurally.
 
 ## COHERENCE REQUIREMENTS
 
@@ -91,19 +55,12 @@ The entire script must maintain ${config.editorial.biasLabel} perspective:
 - Source selection gives voice to ${config.editorial.biasLabel}-aligned sources
 - No contradictory framing from opposing perspectives (unless for contrast)
 
-${editorialSegmentAudit}
-
 ## YOUR TASK
 
-1. Evaluate each theme (1-6) against the Theme Requirements table. Be specific: quote problematic text, state counts, name undefined terms.
-2. ${editorialTaskBlock}
-3. Check cross-theme Coherence and Bias.
-4. Check cross-segment consistency: verify all segment XML tags are present, transitions between segments flow naturally, and no segment is missing.
-5. Decide routing:
-   - **FULL_SCRIPT rewrite**: If ≥4 themes fail, OR any segment is missing, OR cross-segment coherence is broken.
-   - **SEGMENTS rewrite**: If 1-3 themes fail and all segments exist and cross-segment coherence is intact.
-   - **APPROVED**: If all themes pass with zero issues.
-6. Return JSON (see format below).
+1. Check structural completeness: all segments present, XML tags intact.
+2. Check cross-theme coherence (transitions, progression, cross-references, tone).
+3. Check bias consistency across the full script.
+4. Return JSON (see format below).
 
 ## OUTPUT FORMAT
 
@@ -113,44 +70,35 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 {
   "approval_status": "APPROVED" | "REJECTED",
   "has_feedback": true | false,
-  "rewrite_scope": "" | "FULL_SCRIPT" | "SEGMENTS",
-  "failed_segments": [1, 3],
-  "stories": [
-    {
-      "story_id": 1,
-      "rules": [
-        { "rule_name": "LENGTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "DEPTH", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "SENTENCE_STRUCTURE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "ACCESSIBILITY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "FORWARD_CLOSE", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "SOURCE_ATTRIBUTION", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
-        { "rule_name": "GEOGRAPHY", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." }
-      ]
-    },
-    { "story_id": 2, "rules": [...] },
-    { "story_id": 3, "rules": [...] },
-    { "story_id": 4, "rules": [...] },
-    { "story_id": 5, "rules": [...] },
-    { "story_id": 6, "rules": [...] }${editorialStoryBlock}
-  ],
-  "rewriter_instructions": "Specific, actionable fixes per theme. Or: 'All requirements passed. No changes needed.'"
+  "rewriter_instructions": "Specific, actionable fixes. Or: 'All requirements passed. No changes needed.'"
 }
 \`\`\`
 
 ## ROUTING RULES
 
-- **rewrite_scope**: Set to "FULL_SCRIPT" if ≥4 stories fail, OR any segment is missing, OR cross-segment coherence issues exist. Set to "SEGMENTS" if 1-3 stories fail and all segments exist with good transitions.
-- **failed_segments**: Array of story_ids (1-7) that failed. Only required when rewrite_scope is "SEGMENTS". Omit or set to empty array when rewrite_scope is "FULL_SCRIPT".
-- If approval_status is "APPROVED", set rewrite_scope to "" (empty string) and failed_segments to empty array.
-- If approval_status is "REJECTED", rewrite_scope MUST be "FULL_SCRIPT" or "SEGMENTS" based on the failure pattern.
+You have exactly TWO possible outcomes:
+
+**APPROVED** — Use ONLY when:
+- All segments are present and XML tags are intact, AND
+- Cross-theme coherence passes (transitions, progression, cross-references, tone), AND
+- Bias consistency is clean across the full script.
+
+→ Set: approval_status: "APPROVED", has_feedback: false, rewriter_instructions: "All requirements passed. No changes needed."
+
+**REJECTED** — Use when ANY of the following is true:
+- One or more segments are missing or empty, OR
+- Transitions are broken or jarring, OR
+- Progression is illogical, OR
+- Cross-references are missing, OR
+- Tone is inconsistent, OR
+- Bias is inconsistent or contradictory.
+
+→ Set: approval_status: "REJECTED", has_feedback: true, rewriter_instructions: "Specific, actionable fixes for the script-wide issues found."
 
 ## CRITICAL RULES
 
 - "has_feedback" MUST match approval_status exactly: "APPROVED" → false, "REJECTED" → true. No exceptions.
-- Include "rejection_reason" for EVERY FAIL rule. Be specific: quote the problematic text, explain why it fails, and say exactly what to change.
-- "rewriter_instructions" is your catch-all for any feedback that does NOT fit the specific rules above (e.g. "Add a stronger bridge between Topic 2 and Topic 3", "The sign-off feels abrupt"). It must be actionable enough that a writer can fix the draft without re-reading the criteria.
-- If all rules pass and you have no extra observations, set rewriter_instructions to "All requirements passed. No changes needed."
-- There must be exactly ${editorialStoryCount} stories in the output (6 themes${hasEditorialSegment ? ' + 1 editorial segment' : ''}).
+- "rewriter_instructions" must be actionable enough that a writer can fix the draft without re-reading the criteria.
+- If all checks pass and you have no extra observations, set rewriter_instructions to "All requirements passed. No changes needed."
 `;
 }

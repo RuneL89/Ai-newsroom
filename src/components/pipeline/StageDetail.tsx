@@ -347,6 +347,7 @@ function AuditTab({ stage, audit }: { stage: StageRecord; audit: AuditResult | u
     (sum, s) => sum + s.rules.filter((r) => r.status === 'FAIL').length,
     0
   );
+  const hasStories = audit.stories.length > 0;
 
   const themeLabels = [
     'Local Theme 1',
@@ -379,40 +380,51 @@ function AuditTab({ stage, audit }: { stage: StageRecord; audit: AuditResult | u
             </span>
           )}
         </div>
-        <span className="text-[10px] text-slate-500">
-          {failCount}/{totalRules} checks failed
-        </span>
+        {hasStories && (
+          <span className="text-[10px] text-slate-500">
+            {failCount}/{totalRules} checks failed
+          </span>
+        )}
       </div>
 
+      {/* Script-wide audit notice (no per-theme breakdown) */}
+      {!hasStories && (
+        <div className="text-xs text-slate-400 bg-slate-800/30 rounded border border-slate-700/30 px-3 py-2">
+          Script-wide audit — coherence, bias, and structural completeness. No per-theme breakdown.
+        </div>
+      )}
+
       {/* Per-Theme Breakdown */}
-      <div className="space-y-3">
-        {audit.stories.map((story, idx) => {
-          const label = themeLabels[idx] || `Theme ${idx + 1}`;
-          const storyFails = story.rules.filter((r) => r.status === 'FAIL').length;
-          return (
-            <div key={idx} className="bg-slate-800/50 rounded border border-slate-700/50">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/50">
-                <span className="text-xs font-medium text-slate-200">{label}</span>
-                <span
-                  className={cn(
-                    'text-[10px] px-1.5 py-0.5 rounded font-medium',
-                    storyFails === 0
-                      ? 'bg-green-900/30 text-green-400'
-                      : 'bg-red-900/30 text-red-400'
-                  )}
-                >
-                  {storyFails === 0 ? 'PASS' : `${storyFails} FAIL`}
-                </span>
+      {hasStories && (
+        <div className="space-y-3">
+          {audit.stories.map((story, idx) => {
+            const label = themeLabels[idx] || `Theme ${idx + 1}`;
+            const storyFails = story.rules.filter((r) => r.status === 'FAIL').length;
+            return (
+              <div key={idx} className="bg-slate-800/50 rounded border border-slate-700/50">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/50">
+                  <span className="text-xs font-medium text-slate-200">{label}</span>
+                  <span
+                    className={cn(
+                      'text-[10px] px-1.5 py-0.5 rounded font-medium',
+                      storyFails === 0
+                        ? 'bg-green-900/30 text-green-400'
+                        : 'bg-red-900/30 text-red-400'
+                    )}
+                  >
+                    {storyFails === 0 ? 'PASS' : `${storyFails} FAIL`}
+                  </span>
+                </div>
+                <div className="px-3 py-2 space-y-1">
+                  {story.rules.map((rule, rIdx) => (
+                    <RuleRow key={rIdx} rule={rule} />
+                  ))}
+                </div>
               </div>
-              <div className="px-3 py-2 space-y-1">
-                {story.rules.map((rule, rIdx) => (
-                  <RuleRow key={rIdx} rule={rule} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Rewriter Instructions */}
       {audit.rewriter_instructions && audit.rewriter_instructions.length > 0 && (

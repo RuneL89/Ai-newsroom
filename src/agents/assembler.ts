@@ -5,7 +5,7 @@ import { assembleFullScript, type Segment } from '../lib/scriptParser';
 /**
  * Assembler: Pure code stage — no LLM call.
  * Reads all segment files, concatenates into full_script.txt.
- * Routes back to Full Script Editor for cross-theme re-verify.
+ * Routes to Audio Producer (agent6) after assembly.
  */
 export function createAssembler(): AgentFn {
   return async (ctx, onReasoningChunk) => {

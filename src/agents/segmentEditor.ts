@@ -2,55 +2,48 @@ import type { AgentFn } from '../lib/pipelineTypes';
 import { loadApiConfig, streamLLM } from '../lib/apiConfig';
 import { buildSegmentEditorPrompt } from '../prompts/segmentEditor';
 import { parseFullScriptEditorOutput } from './fullScriptEditorParse';
-import { readAllSegments, type SegmentId } from '../lib/fileManager';
-import { assembleFullScript, type Segment } from '../lib/scriptParser';
+import { readSegment, type SegmentId } from '../lib/fileManager';
+
+const INDEX_TO_SEGMENT: SegmentId[] = [
+  'topic1', 'topic2', 'topic3',
+  'topic4', 'topic5', 'topic6', 'topic7',
+];
 
 export function createSegmentEditor(): AgentFn {
   return async (ctx, onReasoningChunk) => {
-    const { sessionConfig, feedback } = ctx;
+    const { sessionConfig, segmentLoopIndex, currentDraft } = ctx;
 
-    // Extract which segments were rewritten
-    const rewrittenSegmentIds =
-      feedback && typeof feedback === 'object' && Array.isArray((feedback as Record<string, unknown>).rewrittenSegmentIds)
-        ? (feedback as Record<string, unknown>).rewrittenSegmentIds as SegmentId[]
-        : [];
-
-    if (rewrittenSegmentIds.length === 0) {
-      throw new Error('Segment Editor received no rewritten segment IDs — nothing to audit');
+    if (segmentLoopIndex < 0 || segmentLoopIndex >= INDEX_TO_SEGMENT.length) {
+      throw new Error(`Segment Editor received invalid segmentLoopIndex: ${segmentLoopIndex}`);
     }
 
-    // Read all segments (including unchanged ones for context)
-    onReasoningChunk(`Reading segments for targeted audit...\n`);
-    const allSegments = await readAllSegments();
+    const targetSegmentId = INDEX_TO_SEGMENT[segmentLoopIndex];
+    const targetStoryId = segmentLoopIndex + 1;
+    const topicName = targetSegmentId === 'topic7'
+      ? 'Editorial'
+      : sessionConfig.content.topics[segmentLoopIndex % 3] ?? 'Unknown';
 
-    // Build full script from segments for the audit
-    const segments: Segment[] = [
-      { id: 'intro', content: allSegments.intro },
-      { id: 'topic1', topic: sessionConfig.content.topics[0], content: allSegments.topic1 },
-      { id: 'topic2', topic: sessionConfig.content.topics[1], content: allSegments.topic2 },
-      { id: 'topic3', topic: sessionConfig.content.topics[2], content: allSegments.topic3 },
-      { id: 'topic4', topic: sessionConfig.content.topics[0], content: allSegments.topic4 },
-      { id: 'topic5', topic: sessionConfig.content.topics[1], content: allSegments.topic5 },
-      { id: 'topic6', topic: sessionConfig.content.topics[2], content: allSegments.topic6 },
-    ];
-    if (sessionConfig.editorial.includeSegment) {
-      segments.push({ id: 'topic7', topic: 'Editorial', content: allSegments.topic7 });
+    // Read the target segment from disk
+    onReasoningChunk(`Reading segment ${targetSegmentId} for focused audit...\n`);
+    const segmentContent = await readSegment(targetSegmentId);
+
+    if (!segmentContent || segmentContent.trim().length === 0) {
+      throw new Error(`Segment Editor found empty segment: ${targetSegmentId}`);
     }
-    segments.push({ id: 'outro', content: allSegments.outro });
 
-    const fullScript = assembleFullScript(segments);
-
-    // Build prompt focused on rewritten segments
+    // Build prompt focused on single topic
     onReasoningChunk('Building segment audit prompt...\n');
     const prompt = buildSegmentEditorPrompt(
       sessionConfig,
-      fullScript,
-      rewrittenSegmentIds,
+      segmentContent,
+      targetSegmentId,
+      targetStoryId,
+      topicName,
       ctx.iteration
     );
 
     // Stream to LLM
-    onReasoningChunk('Sending segments to Segment Editor for audit...\n\n');
+    onReasoningChunk(`Sending segment ${targetSegmentId} to Segment Editor for audit...\n\n`);
 
     let response = '';
     let reasoning = '';
@@ -78,8 +71,8 @@ export function createSegmentEditor(): AgentFn {
 
     // Stream summary
     const statusLine = auditResult.approval_status === 'APPROVED'
-      ? `✓ APPROVED${auditResult.has_feedback ? ' (with feedback)' : ' (clean pass)'}`
-      : '✗ REJECTED';
+      ? `✓ ${targetSegmentId} APPROVED${auditResult.has_feedback ? ' (with feedback)' : ' (clean pass)'}`
+      : `✗ ${targetSegmentId} REJECTED`;
     onReasoningChunk(`\n${statusLine}\n`);
 
     if (auditResult.has_feedback && auditResult.rewriter_instructions) {
@@ -87,7 +80,7 @@ export function createSegmentEditor(): AgentFn {
     }
 
     return {
-      draft: fullScript,
+      draft: currentDraft, // Editor does not rewrite — passes through unchanged
       reasoning,
       prompt,
       metadata: { ...auditResult, streamDiagnostics: diagnostics },

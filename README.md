@@ -27,11 +27,11 @@ Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 | # | Agent | Status | What It Does |
 |---|---|---|---|
 | 1 | **Researcher** | ✅ Real | Queries Brave Search for local + continent news across your 3 topics, writes the first draft as XML segments (`intro.txt`, `Topic1-6.txt`, `outro.txt`) with music cues and editorial framing |
-| 2 | **Full Script Editor** | ✅ Real | Evaluates all 6 themes + optional editorial segment against structured rules. Decides `rewrite_scope`: `FULL_SCRIPT` (≥4 failures) or `SEGMENTS` (1-3 failures). Returns per-theme PASS/FAIL audit |
+| 2 | **Full Script Editor** | ✅ Real | Checks script-wide coherence, bias consistency, and structural completeness (all segments present). Binary pass/fail — no per-theme audit. Runs twice: once after Researcher, once after Assembler. |
 | 3 | **Full Script Writer** | ✅ Real | Receives editor feedback, rewrites the **entire** script, parses XML segments, writes them back to files |
-| 4 | **Segment Writer** | ✅ Real | Receives `failed_segments` list, reads only failing `TopicN.txt` files + adjacent segments for transition context. Rewrites **only** the failing segments |
-| 5 | **Segment Editor** | ✅ Real | Audits rewritten segments in context of adjacent segments. Checks transitions are smooth |
-| 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes back to Full Script Editor for cross-segment re-verify |
+| 4 | **Segment Writer** | ✅ Real | Rewrites one topic at a time in the sequential topic loop. Reads target segment + adjacent segments for transition context. |
+| 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the sequential topic loop. Evaluates only the 7 topic-level requirements (Length, Depth, Sentence structure, Accessibility, Forward close, Source attribution, Geography). |
+| 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes to Full Script Editor for second-pass coherence/bias verification. |
 | 7 | **Audio Producer** | ⏳ Stub | Strips XML tags, generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
 
 Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, the **first draft** (for the Researcher), and the **structured audit** (for Editors). If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
@@ -51,48 +51,48 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
 
     ┌─────────────┐
     │  Researcher │  ← Queries Brave Search, writes first draft as
-    │   (Agent 1) │     XML segments → files (intro.txt, Topic1-6.txt, outro.txt)
+    │   (Agent 1) │     XML segments → files (intro.txt, Topic1-7.txt, outro.txt)
     └──────┬──────┘
            │
            ▼
     ┌─────────────────┐
-    │ Full Script     │  ← Evaluates 6 themes + editorial segment
-    │ Editor          │     Decides rewrite_scope: FULL_SCRIPT or SEGMENTS
-    │ (Gate 1)        │
+    │ Full Script     │  ← Pass 1: Checks script-wide coherence, bias,
+    │ Editor (Pass 1) │     and structural completeness. Binary pass/fail.
     └──────┬──────────┘
            │
-           ├─────────────────┬────────────────────────────────────────┐
-           │                 │                                        │
-           ▼                 ▼ rewrite_scope = FULL_SCRIPT            │
-    ┌─────────────┐   ┌─────────────────┐                             │
-    │   Audio     │   │ Full Script     │  ← Rewrites entire script,  │
-    │  Producer   │   │ Writer          │     writes all segments     │
-    │  (Agent 6)  │   │                 │     back to files           │
-    └──────┬──────┘   └──────┬──────────┘                             │
-           │                 │                                         │
-           │  (if approved)  └─────────────────────────────────────────┘
-           │
-           ▼
-    ┌─────────────────┐
-    │ Segment Writer  │  ← Reads failing TopicN.txt + adjacent segments
-    │                 │     Rewrites ONLY failing segments
-    └──────┬──────────┘
-           │
-           ▼
-    ┌─────────────────┐
-    │ Segment Editor  │  ← Audits rewritten segments + transitions
-    │                 │
-    └──────┬──────────┘
-           │
-           ├────────┬─────────────────────────────────────────────────┐
-           │        │                                                 │
-           ▼        ▼ Rejected                                        │
-    ┌─────────────┐  └─────────────────────────────────────────────────┘
-    │  Assembler  │  ← Pure code: concatenates all segments into
-    │             │     full_script.txt. Routes back to Full Script Editor
-    └──────┬──────┘     for cross-segment re-verify.
-           │
-           │  (if approved)
+           ├──────────────┐
+           │ REJECTED     │ APPROVED
+           ▼              ▼
+    ┌─────────────┐   ┌─────────────────────────────────────────┐
+    │ Full Script │   │  SEQUENTIAL TOPIC LOOP (topic 1 → 7)    │
+    │ Writer      │   │  ┌─────────────┐  ┌─────────────────┐   │
+    │             │   │  │ Segment     │→ │ Segment Editor  │   │
+    │ (rewrites   │   │  │ Writer      │   │ (7 rules only)  │   │
+    │  entire     │   │  │ (1 topic)   │← │ Rejected → loop │   │
+    │  script)    │   │  └─────────────┘   │ Approved → next │   │
+    └──────┬──────┘   │                    └─────────────────┘   │
+           │          └─────────────────────────────────────────┘
+           └──────────────────────────────────────────────┐
+                                                            │
+           ▼ (last topic approved)                          │
+    ┌─────────────┐                                         │
+    │  Assembler  │  ← Pure code: concatenates all segments │
+    │             │     into full_script.txt                │
+    └──────┬──────┘                                         │
+           │                                                │
+           ▼                                                │
+    ┌─────────────────┐                                     │
+    │ Full Script     │  ← Pass 2: Re-checks coherence &    │
+    │ Editor (Pass 2) │     bias after all topic rewrites.   │
+    └──────┬──────────┘     REJECTED → Full Script Writer   │
+           │                   (then re-run full topic loop) │
+           │ APPROVED                                       │
+           ▼                                                │
+    ┌─────────────┐                                         │
+    │   Audio     │                                         │
+    │  Producer   │                                         │
+    │  (Agent 6)  │◄────────────────────────────────────────┘
+    └─────────────┘
            │
            ▼
       ✅ COMPLETE
@@ -100,17 +100,22 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
 
 ### Rejection Loops
 
-**Full Script Editor → Full Script Writer loop (FULL_SCRIPT):**
-- Full Script Editor audits the draft. If ≥4 themes fail, any segment is missing, or cross-segment coherence is broken, it sets `rewrite_scope: "FULL_SCRIPT"`.
-- Full Script Writer receives the entire script + `rewriter_instructions`, rewrites everything top-to-bottom, parses XML segments, and writes all files back.
-- The draft goes **back to Full Script Editor** for re-evaluation.
+**Full Script Editor → Full Script Writer loop (Pass 1):**
+- Full Script Editor (Pass 1) checks script-wide coherence, bias consistency, and structural completeness (all segments present, XML tags intact).
+- If ANY issue is found, it rejects and the Full Script Writer receives the entire script + `rewriter_instructions`, rewrites everything top-to-bottom, parses XML segments, and writes all files back.
+- The draft goes **back to Full Script Editor (Pass 1)** for re-evaluation.
 
-**Full Script Editor → Segment Writer → Segment Editor loop (SEGMENTS):**
-- If only 1-3 themes fail and all segments exist with intact transitions, the Editor sets `rewrite_scope: "SEGMENTS"` and lists `failed_segments: [1, 3]`.
-- Segment Writer reads **only** the failing `TopicN.txt` files + adjacent segments for transition context. It rewrites **only** those segments, leaving approved segments untouched.
-- Segment Editor audits the rewritten segments in context of their neighbors, checking transitions are smooth.
-- If approved, an **Assembler** concatenates all segments into `full_script.txt` and routes back to Full Script Editor for cross-segment re-verify.
-- If rejected, the loop returns to Segment Writer with updated feedback.
+**Sequential Topic Loop (Segment Writer → Segment Editor):**
+- After Full Script Editor (Pass 1) approves, the pipeline enters a sequential per-topic loop: topic 1 → topic 2 → ... → topic 7.
+- For each topic, the Segment Writer reads the target segment + adjacent segments for transition context, then rewrites only that segment.
+- The Segment Editor audits **only** that topic against the 7 topic-level rules (Length, Depth, Sentence structure, Accessibility, Forward close, Source attribution, Geography).
+- If rejected, the loop stays on the **same topic** until it passes.
+- If approved, the loop advances to the **next topic**.
+
+**Full Script Editor → Full Script Writer loop (Pass 2):**
+- After all topics pass and the Assembler concatenates segments, the Full Script Editor runs a **second pass** to verify that the per-topic rewrites did not break script-wide coherence or bias.
+- If rejected, the Full Script Writer rewrites the entire script, and the Full Script Editor re-audits. If approved, the **entire topic loop re-runs from topic 1** (Option A — full re-loop for safety).
+- If approved, the pipeline proceeds to the Audio Producer.
 
 All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 
@@ -122,7 +127,24 @@ All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 
 ### Editor Approval Rules
 
-Both editors use the same 7-rule checklist per story. A story **FAILS** if it violates **any** rule.
+**Full Script Editor** (script-wide audit — runs twice):
+
+Checks:
+- **Structural completeness**: All segments present (intro, topic1–7, outro), XML tags intact
+- **Coherence**: Transitions between themes, logical progression, cross-references, tone consistency
+- **Bias consistency**: Headlines, theme order, language, source selection, framing all align with chosen perspective
+
+Approval:
+- `approval_status`: `"APPROVED"`, `has_feedback`: `false`
+- `rewriter_instructions`: `"All requirements passed. No changes needed."`
+
+Rejection:
+- `approval_status`: `"REJECTED"`, `has_feedback`: `true`
+- `rewriter_instructions`: Specific, actionable fixes for script-wide issues
+
+**Segment Editor** (topic-level audit — runs once per topic in sequential loop):
+
+A story **FAILS** if it violates **any** of the 7 rules:
 
 | # | Rule | PASS Standard |
 |---|---|---|
@@ -134,29 +156,14 @@ Both editors use the same 7-rule checklist per story. A story **FAILS** if it vi
 | 6 | **Source attribution** | Specific sources cited by name in the text |
 | 7 | **Geography** | Local themes = only chosen-country stories; Continent themes = only continent-country stories |
 
-**Full Script Editor approval:**
-- ALL 7 rules PASS on ALL stories (1–6, plus 7 if editorial segment enabled)
-- No missing segments (intro, topic1–6, outro all present)
-- Cross-segment transitions flow naturally
-- `approval_status`: `"APPROVED"`, `has_feedback`: `false`, `rewrite_scope`: `""`
-- `rewriter_instructions`: `"All requirements passed. No changes needed."`
-
-**Full Script Editor rejection:**
-- ≥4 stories fail → `rewrite_scope`: `"FULL_SCRIPT"`
-- 1–3 stories fail → `rewrite_scope`: `"SEGMENTS"`, `failed_segments`: `[story IDs]`
-- Any segment missing OR cross-segment coherence broken → `rewrite_scope`: `"FULL_SCRIPT"`
-- `approval_status`: `"REJECTED"`, `has_feedback`: `true`
-- `rewriter_instructions`: Specific, actionable fixes per failing story
-
-**Segment Editor approval:**
-- ALL rewritten segments PASS their 7 rules
-- Transitions to adjacent segments are smooth (tone, register, vocabulary match)
+Approval:
+- ALL 7 rules PASS on the evaluated topic
 - `approval_status`: `"APPROVED"`, `has_feedback`: `false`, `rewrite_scope`: `""`
 
-**Segment Editor rejection:**
-- Rewritten segments still fail → `rewrite_scope`: `"SEGMENTS"`, `failed_segments`: `[still-failing story IDs]`
-- Cross-segment coherence broken (rewritten segments no longer connect to the rest of the script) → `rewrite_scope`: `"FULL_SCRIPT"`
+Rejection:
+- ANY rule fails → `rewrite_scope`: `"SEGMENTS"`, `failed_segments`: `[current story ID]`
 - `approval_status`: `"REJECTED"`, `has_feedback`: `true`
+- `rewriter_instructions`: Specific, actionable fixes for the failing topic
 
 ### Agent Contracts
 

@@ -4,65 +4,60 @@ import { buildSegmentWriterPrompt } from '../prompts/segmentWriter';
 import { writeSegment, writeFullScript, readAllSegments, type SegmentId } from '../lib/fileManager';
 import { parseFullScript, assembleFullScript, type Segment } from '../lib/scriptParser';
 
-const STORY_ID_TO_SEGMENT: Record<number, SegmentId> = {
-  1: 'topic1',
-  2: 'topic2',
-  3: 'topic3',
-  4: 'topic4',
-  5: 'topic5',
-  6: 'topic6',
-  7: 'topic7',
-};
+const INDEX_TO_SEGMENT: SegmentId[] = [
+  'topic1', 'topic2', 'topic3',
+  'topic4', 'topic5', 'topic6', 'topic7',
+];
+
+const ALL_SEGMENT_IDS: SegmentId[] = [
+  'intro', 'topic1', 'topic2', 'topic3', 'topic4', 'topic5', 'topic6', 'topic7', 'outro',
+];
 
 export function createSegmentWriter(): AgentFn {
   return async (ctx, onReasoningChunk) => {
-    const { sessionConfig, feedback } = ctx;
+    const { sessionConfig, segmentLoopIndex, feedback } = ctx;
 
-    // Extract failed segments from editor feedback
-    const failedSegments =
-      feedback && typeof feedback === 'object' && Array.isArray((feedback as Record<string, unknown>).failed_segments)
-        ? (feedback as Record<string, unknown>).failed_segments as number[]
-        : [];
+    if (segmentLoopIndex < 0 || segmentLoopIndex >= INDEX_TO_SEGMENT.length) {
+      throw new Error(`Segment Writer received invalid segmentLoopIndex: ${segmentLoopIndex}`);
+    }
+
+    const targetSegmentId = INDEX_TO_SEGMENT[segmentLoopIndex];
 
     const rewriterInstructions =
       feedback && typeof feedback === 'object' && 'rewriter_instructions' in feedback
         ? String((feedback as Record<string, unknown>).rewriter_instructions)
-        : 'Fix the identified issues in the failing segments.';
-
-    if (failedSegments.length === 0) {
-      throw new Error('Segment Writer received no failed segments — nothing to rewrite');
-    }
+        : 'Fix the identified issues in the target segment.';
 
     // Read all segments for context
     onReasoningChunk(`Reading segment files for context...\n`);
     const allSegments = await readAllSegments();
 
-    // Read adjacent segments for transition context
-    const segmentIdsToRewrite = failedSegments.map((n) => STORY_ID_TO_SEGMENT[n]).filter(Boolean) as SegmentId[];
-
-    // Build context: failing segments + adjacent segments for transitions
+    // Build context: target segment + adjacent segments for transitions
     const contextSegments: Record<SegmentId, string> = {} as Record<SegmentId, string>;
-    for (const id of segmentIdsToRewrite) {
-      contextSegments[id] = allSegments[id];
-      // Add adjacent segment before for transition context
-      const idx = ['intro', 'topic1', 'topic2', 'topic3', 'topic4', 'topic5', 'topic6', 'topic7', 'outro'].indexOf(id);
-      if (idx > 0) {
-        const prevId = ['intro', 'topic1', 'topic2', 'topic3', 'topic4', 'topic5', 'topic6', 'topic7', 'outro'][idx - 1] as SegmentId;
-        if (!contextSegments[prevId]) contextSegments[prevId] = allSegments[prevId];
-      }
-      // Add adjacent segment after for transition context
-      if (idx < 8) {
-        const nextId = ['intro', 'topic1', 'topic2', 'topic3', 'topic4', 'topic5', 'topic6', 'topic7', 'outro'][idx + 1] as SegmentId;
-        if (!contextSegments[nextId]) contextSegments[nextId] = allSegments[nextId];
-      }
+    contextSegments[targetSegmentId] = allSegments[targetSegmentId];
+
+    const idx = ALL_SEGMENT_IDS.indexOf(targetSegmentId);
+    if (idx > 0) {
+      const prevId = ALL_SEGMENT_IDS[idx - 1];
+      contextSegments[prevId] = allSegments[prevId];
+    }
+    if (idx < ALL_SEGMENT_IDS.length - 1) {
+      const nextId = ALL_SEGMENT_IDS[idx + 1];
+      contextSegments[nextId] = allSegments[nextId];
     }
 
     // Build prompt
-    onReasoningChunk(`Building segment rewrite prompt for: ${segmentIdsToRewrite.join(', ')}...\n`);
-    const prompt = buildSegmentWriterPrompt(sessionConfig, contextSegments, segmentIdsToRewrite, rewriterInstructions, ctx.iteration);
+    onReasoningChunk(`Building segment rewrite prompt for ${targetSegmentId}...\n`);
+    const prompt = buildSegmentWriterPrompt(
+      sessionConfig,
+      contextSegments,
+      targetSegmentId,
+      rewriterInstructions,
+      ctx.iteration
+    );
 
     // Stream to LLM
-    onReasoningChunk(`Sending segments to Segment Writer for targeted rewrite...\n\n`);
+    onReasoningChunk(`Sending ${targetSegmentId} to Segment Writer for targeted rewrite...\n\n`);
 
     let response = '';
     let reasoning = '';
@@ -86,12 +81,12 @@ export function createSegmentWriter(): AgentFn {
     });
 
     // Parse rewritten segments from response
-    onReasoningChunk('Parsing rewritten segments...\n');
+    onReasoningChunk('Parsing rewritten segment...\n');
     const rewrittenSegments = parseFullScript(response);
 
-    // Write only the rewritten segments back to files
+    // Write only the rewritten segment back to files
     for (const seg of rewrittenSegments) {
-      if (segmentIdsToRewrite.includes(seg.id)) {
+      if (seg.id === targetSegmentId) {
         await writeSegment(seg.id, seg.content);
         onReasoningChunk(`Updated ${seg.id}.txt (${seg.content.length} chars)\n`);
       }
@@ -121,7 +116,7 @@ export function createSegmentWriter(): AgentFn {
       reasoning,
       prompt,
       metadata: {
-        rewrittenSegmentIds: segmentIdsToRewrite,
+        rewrittenSegmentId: targetSegmentId,
         streamDiagnostics: diagnostics,
       },
     };

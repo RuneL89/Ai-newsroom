@@ -22,6 +22,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     finalDraft: null,
     error: null,
     editorLoops: 0,
+    segmentLoopIndex: -1,
   });
 
   const runnerRef = useRef<PipelineRunner | null>(null);

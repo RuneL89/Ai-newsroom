@@ -30,6 +30,7 @@ export interface AgentContext {
   sessionConfig: SessionConfig;
   currentDraft: string;
   iteration: number;
+  segmentLoopIndex: number;
   feedback?: unknown;
 }
 
@@ -57,6 +58,7 @@ export interface PipelineState {
   finalDraft: string | null;
   error: string | null;
   editorLoops: number;
+  segmentLoopIndex: number;
 }
 
 export interface PipelineCallbacks {
