@@ -11,6 +11,41 @@ export function buildSegmentEditorPrompt(
   const topicList = config.content.topics.join(', ');
   const hasEditorialSegment = config.editorial.includeSegment;
 
+  // Map segment IDs to story IDs and topic names for the sequence
+  const segmentToStoryId: Record<string, number> = {
+    topic1: 1, topic2: 2, topic3: 3,
+    topic4: 4, topic5: 5, topic6: 6,
+    topic7: 7,
+  };
+
+  const rewrittenStories = rewrittenSegmentIds
+    .filter((id) => id !== 'intro' && id !== 'outro')
+    .map((id) => {
+      const storyId = segmentToStoryId[id] ?? 0;
+      const topicName = id === 'topic7'
+        ? 'Editorial'
+        : config.content.topics[(storyId - 1) % 3] ?? 'Unknown';
+      return { storyId, segmentId: id, topicName };
+    });
+
+  // Build the numbered evaluation steps
+  let stepNumber = 1;
+  const evaluationSteps: string[] = [];
+
+  for (const story of rewrittenStories) {
+    evaluationSteps.push(
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}, topic: ${story.topicName}) — **LENGTH**. Is it ≥2000 characters?`,
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **DEPTH**. Does it synthesize ≥3 distinct developments, events, or angles?`,
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **SENTENCE_STRUCTURE**. Are ≥60% of sentences 15-30 words? Is average >15 words?`,
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **ACCESSIBILITY**. Would a zero-knowledge listener follow without Googling? Are all terms defined on first mention?`,
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **FORWARD_CLOSE**. Does it end with "what to watch" or "what happens next"?`,
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **SOURCE_ATTRIBUTION**. Are specific sources cited by name in the text?`,
+      `Step ${stepNumber++}: Evaluate Story ${story.storyId} (${story.segmentId}) — **GEOGRAPHY**. Local themes = only ${config.geography.country.name} stories. Continent themes = only ${config.geography.continent.name} countries with continent angle.`
+    );
+  }
+
+  const finalStepStart = stepNumber;
+
   const editorialStoryBlock = hasEditorialSegment
     ? `    { "story_id": 7, "rules": [
         { "rule_name": "EDITORIAL_SEGMENT_PRESENT", "status": "PASS" | "FAIL", "details": "...", "rejection_reason": "..." },
@@ -42,35 +77,33 @@ Topics: ${topicList}
 ${fullScript}
 \`\`\`
 
-## THEME REQUIREMENTS
+## EVALUATION SEQUENCE — FOLLOW THESE STEPS IN EXACT ORDER
 
-Evaluate each rewritten theme against these criteria:
+**CRITICAL: Work through each step sequentially. Do not skip steps. Do not go back to re-evaluate a previous step. Record your PASS/FAIL verdict for each step as you go, then move to the next.**
 
-| # | Criterion | PASS standard | Typical FAIL |
-|---|---|---|---|
-| 1 | **Length** | ≥2000 characters | Under-length, superficial |
-| 2 | **Depth** | Synthesizes ≥3 distinct developments, events, or angles | Only 1-2 stories covered |
-| 3 | **Sentence structure** | ≥60% of sentences are 15-30 words. Average sentence length >15 words. | Too many short choppy or long rambling sentences |
-| 4 | **Accessibility** | Zero-knowledge listener can follow without Googling. Every term, acronym, organization defined on first mention. | Assumes prior knowledge; undefined terms |
-| 5 | **Forward close** | Ends with "what to watch" or "what happens next" | Abrupt ending, no lookahead |
-| 6 | **Source attribution** | Specific sources cited by name in the text | Generic "reports say" with no source |
-| 7 | **Geography** | Local themes = only ${config.geography.country.name} stories. Continent themes = only ${config.geography.continent.name} countries with continent angle. | Wrong geography mixed in |
+For each step, ask the specific question, answer it, and record your verdict before proceeding.
 
-## TRANSITION REQUIREMENTS (CRITICAL)
+${evaluationSteps.join('\n')}
 
-- The rewritten segment must transition smoothly from the preceding segment
-- The rewritten segment must transition smoothly to the following segment
-- Tone and register must match adjacent segments
-- No jarring shifts in style, vocabulary, or knowledge assumptions
+Step ${finalStepStart}: Evaluate **TRANSITIONS** for all rewritten segments.
+- Does each rewritten segment transition smoothly from the preceding segment?
+- Does each rewritten segment transition smoothly to the following segment?
+- Is tone and register consistent with adjacent segments?
+- Are there any jarring shifts in style, vocabulary, or knowledge assumptions?
 
-## YOUR TASK
+Step ${finalStepStart + 1}: Evaluate **BIAS CONSISTENCY** across the full script.
+- Does the rewritten segment maintain ${config.editorial.biasLabel} perspective?
+- Does the rewritten segment's framing, language, and source selection align with ${config.editorial.biasLabel}?
+- Is the bias intensity consistent with adjacent segments (not suddenly stronger or weaker)?
 
-1. Evaluate each rewritten theme (and the editorial segment if rewritten).
-2. Check transitions between rewritten and adjacent segments.
-3. Decide: APPROVED (rewritten segments pass and transitions are smooth) or REJECTED (issues remain).
-4. Return JSON (see format below).
+Step ${finalStepStart + 2}: Count total FAILs across all evaluated stories.
+- If 0 FAILs AND transitions are smooth AND bias is consistent → APPROVED
+- If 1-3 stories still fail → REJECTED, rewrite_scope: "SEGMENTS", failed_segments: [story IDs that still fail]
+- If ≥4 stories fail OR transitions are broken OR bias is jarring → REJECTED, rewrite_scope: "FULL_SCRIPT", failed_segments: []
 
-## OUTPUT FORMAT
+Step ${finalStepStart + 3}: Build the JSON output.
+
+## JSON OUTPUT FORMAT
 
 Produce EXACTLY one JSON object. No markdown, no extra text.
 
@@ -103,17 +136,11 @@ Produce EXACTLY one JSON object. No markdown, no extra text.
 }
 \`\`\`
 
-## ROUTING RULES
-
-- If all rewritten segments pass AND transitions are smooth → APPROVED, rewrite_scope: "", failed_segments: []
-- If rewritten segments still fail OR transitions are broken → REJECTED, rewrite_scope: "SEGMENTS", failed_segments: [story IDs that still fail]
-- If cross-segment coherence is broken (e.g. rewritten segments no longer connect to the rest of the script) → REJECTED, rewrite_scope: "FULL_SCRIPT", failed_segments: []
-
 ## CRITICAL RULES
 
 - "has_feedback" MUST match approval_status exactly: "APPROVED" → false, "REJECTED" → true. No exceptions.
 - Include "rejection_reason" for EVERY FAIL rule. Be specific: quote the problematic text, explain why it fails, and say exactly what to change.
-- "rewriter_instructions" is your catch-all for any feedback that does NOT fit the specific rules above (e.g. "Transition from Topic 2 to Topic 3 is jarring", "Rewritten segment uses different vocabulary than adjacent segments"). It must be actionable enough that a writer can fix the draft without re-reading the criteria.
+- "rewriter_instructions" is your catch-all for any feedback that does NOT fit the specific rules above. It must be actionable enough that a writer can fix the draft without re-reading the criteria.
 - If all rules pass and you have no extra observations, set rewriter_instructions to "All requirements passed. No changes needed."
 `;
 }
