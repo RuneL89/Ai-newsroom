@@ -5,7 +5,7 @@ import { createFullScriptWriter } from './fullScriptWriter';
 import { createSegmentWriter } from './segmentWriter';
 import { createSegmentEditor } from './segmentEditor';
 import { createAssembler } from './assembler';
-import { createAgent6Stub } from './stubs/agent6Stub';
+import { createAudioProducer } from './audioProducer';
 
 export function createAgentMap(): AgentMap {
   return {
@@ -15,6 +15,6 @@ export function createAgentMap(): AgentMap {
     segmentWriter: createSegmentWriter(),
     segmentEditor: createSegmentEditor(),
     assembler: createAssembler(),
-    agent6: createAgent6Stub(),
+    agent6: createAudioProducer(),
   };
 }

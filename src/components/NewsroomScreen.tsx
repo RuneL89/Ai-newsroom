@@ -93,7 +93,7 @@ export default function NewsroomScreen({ sessionConfig }: NewsroomScreenProps) {
       return;
     }
     try {
-      const audio = new Audio(`./audio/voices/${voice.id}.mp3`);
+      const audio = new Audio(`./audio/voices/${voice.id}.wav`);
       voiceAudioRef.current = audio;
       audio.addEventListener('ended', () => {
         setPlayingVoiceId(null);

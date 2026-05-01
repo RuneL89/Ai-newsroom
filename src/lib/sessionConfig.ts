@@ -1,4 +1,6 @@
 import type { Country, Continent, Timeframe, Topic, Voice, BiasPosition, MusicSuite } from '../types';
+
+type VoiceGender = Voice['gender'];
 import { biasOptions } from '../data/bias';
 import { timeframes } from '../data/timeframes';
 
@@ -35,9 +37,10 @@ export interface SessionConfig {
     topics: Topic[];
     voice: {
       id: string;
+      voiceId: string;
       label: string;
       description: string;
-      gender: string;
+      gender: VoiceGender;
       accent: string;
     };
     musicSuite?: {
@@ -104,6 +107,7 @@ export function buildSessionConfig(params: BuildSessionConfigParams): SessionCon
       topics: params.topics,
       voice: {
         id: params.voice.id,
+        voiceId: params.voice.voiceId,
         label: params.voice.label,
         description: params.voice.description,
         gender: params.voice.gender,

@@ -1,0 +1,94 @@
+import type { AgentFn } from '../lib/pipelineTypes';
+import { readAllSegments } from '../lib/fileManager';
+import { writeAudioFile } from '../lib/fileManager';
+import { producePodcast } from '../lib/audioAssembler';
+import { loadTtsApiKey } from '../lib/apiConfig';
+import { voiceInstructions } from '../data/voices';
+
+export function createAudioProducer(): AgentFn {
+  return async (ctx, onReasoningChunk) => {
+    const { sessionConfig } = ctx;
+    const voice = sessionConfig.content.voice;
+    const musicSuite = sessionConfig.content.musicSuite;
+
+    onReasoningChunk('Audio Producer activated. Loading final approved script segments...\n');
+
+    // Load all segments
+    const segments = await readAllSegments();
+    const nonEmptySegments = Object.entries(segments).filter(([, content]) => content.trim().length > 0);
+    onReasoningChunk(`Loaded ${nonEmptySegments.length} non-empty segments.\n`);
+
+    if (nonEmptySegments.length === 0) {
+      throw new Error('No segment files found. The pipeline must generate segments before audio production.');
+    }
+
+    onReasoningChunk(`Voice selected: ${voice.label} (${voice.voiceId})\n`);
+    if (musicSuite) {
+      onReasoningChunk(`Music suite: Intro=${musicSuite.intro}, Outro=${musicSuite.outro}, Story=${musicSuite.storySting}, Block=${musicSuite.blockSting}\n`);
+    } else {
+      onReasoningChunk('No music suite configured. Producing narration only.\n');
+    }
+
+    // Load TTS API key
+    const ttsApiKey = await loadTtsApiKey();
+    if (!ttsApiKey.trim()) {
+      throw new Error('No TTS API key configured. Please add your OpenAI TTS API key in Configure API.');
+    }
+
+    const instructions = voiceInstructions[voice.voiceId] ?? '';
+
+    // Produce podcast
+    const result = await producePodcast(
+      segments,
+      voice,
+      musicSuite,
+      ttsApiKey,
+      instructions,
+      (msg) => onReasoningChunk(msg + '\n')
+    );
+
+    // Save to disk
+    onReasoningChunk(`Saving podcast to storage...\n`);
+    await writeAudioFile(result.podcastFileName, result.podcastBase64);
+    onReasoningChunk(`Saved ${result.podcastFileName}\n`);
+
+    const draft = `## AUDIO PRODUCTION COMPLETE
+
+**Final Podcast:** ${result.podcastFileName}
+**Duration:** ${formatDuration(result.durationSeconds)}
+**Format:** WAV (44.1kHz stereo)
+**Segments processed:** ${result.segmentCount}
+
+### Voice
+${voice.label} (${voice.gender}, ${voice.accent})
+
+${musicSuite ? `### Music Suite
+- Intro: ${musicSuite.intro}
+- Outro: ${musicSuite.outro}
+- Story Sting: ${musicSuite.storySting}
+- Block Sting: ${musicSuite.blockSting}` : '### Music Suite: None configured'}
+
+### Critical Rule Enforced
+Music and narration NEVER overlap. All segments play sequentially with ${0.5}s gaps.
+`;
+
+    return {
+      draft,
+      reasoning: '',
+      metadata: {
+        podcastFileName: result.podcastFileName,
+        durationSeconds: result.durationSeconds,
+        segmentCount: result.segmentCount,
+        voiceId: voice.voiceId,
+        voiceLabel: voice.label,
+        fileSizeMB: (result.podcastBase64.length * 0.75 / 1024 / 1024).toFixed(2),
+      },
+    };
+  };
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}m ${secs}s`;
+}

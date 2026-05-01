@@ -234,6 +234,50 @@ export async function saveBraveApiKey(key: string): Promise<void> {
   await Preferences.set({ key: BRAVE_API_KEY, value: key });
 }
 
+const TTS_API_KEY = 'tts_api_key';
+
+export async function loadTtsApiKey(): Promise<string> {
+  try {
+    const { value } = await Preferences.get({ key: TTS_API_KEY });
+    return value ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export async function saveTtsApiKey(key: string): Promise<void> {
+  await Preferences.set({ key: TTS_API_KEY, value: key });
+}
+
+export async function testTtsApiKey(key: string): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!key.trim()) {
+      return { success: false, message: 'TTS API key is required' };
+    }
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-tts',
+        voice: 'onyx',
+        input: 'Test.',
+        response_format: 'mp3',
+      }),
+    });
+    if (response.ok) {
+      return { success: true, message: 'TTS connection successful!' };
+    }
+    const errorData = await response.json().catch(() => ({}));
+    const msg = errorData.error?.message || `HTTP ${response.status}`;
+    return { success: false, message: `Connection failed: ${msg}` };
+  } catch (err) {
+    return { success: false, message: `Connection failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 export async function testBraveApiKey(key: string): Promise<{ success: boolean; message: string }> {
   try {
     if (!key.trim()) {

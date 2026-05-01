@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Search, FolderOpen } from 'lucide-react';
+import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Search, FolderOpen, Headphones } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { loadApiConfig, saveApiConfig, testApiConnection, loadBraveApiKey, saveBraveApiKey, testBraveApiKey, providerOptions } from '../lib/apiConfig';
+import { loadApiConfig, saveApiConfig, testApiConnection, loadBraveApiKey, saveBraveApiKey, testBraveApiKey, loadTtsApiKey, saveTtsApiKey, testTtsApiKey, providerOptions } from '../lib/apiConfig';
 import { isExternalStorageEnabled, setExternalStorageEnabled } from '../lib/fileManager';
 import type { ApiConfig, ApiProvider } from '../types';
 
@@ -16,20 +16,25 @@ export default function ConfigureApiScreen() {
   const [showKey, setShowKey] = useState(false);
   const [braveApiKey, setBraveApiKey] = useState('');
   const [showBraveKey, setShowBraveKey] = useState(false);
+  const [ttsApiKey, setTtsApiKey] = useState('');
+  const [showTtsKey, setShowTtsKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTestingBrave, setIsTestingBrave] = useState(false);
   const [braveTestResult, setBraveTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTestingTts, setIsTestingTts] = useState(false);
+  const [ttsTestResult, setTtsTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [useExternalStorage, setUseExternalStorage] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadApiConfig(), loadBraveApiKey(), isExternalStorageEnabled()]).then(([loaded, braveKey, externalStorage]) => {
+    Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey(), isExternalStorageEnabled()]).then(([loaded, braveKey, ttsKey, externalStorage]) => {
       if (!cancelled) {
         setConfig(loaded);
         setBraveApiKey(braveKey);
+        setTtsApiKey(ttsKey);
         setUseExternalStorage(externalStorage);
         setIsLoaded(true);
       }
@@ -53,6 +58,7 @@ export default function ConfigureApiScreen() {
       await Promise.all([
         saveApiConfig(config),
         saveBraveApiKey(braveApiKey),
+        saveTtsApiKey(ttsApiKey),
         setExternalStorageEnabled(useExternalStorage),
       ]);
       toast.success('API configuration saved!');
@@ -92,6 +98,22 @@ export default function ConfigureApiScreen() {
       }
     } finally {
       setIsTestingBrave(false);
+    }
+  };
+
+  const handleTestTts = async () => {
+    setIsTestingTts(true);
+    setTtsTestResult(null);
+    try {
+      const result = await testTtsApiKey(ttsApiKey);
+      setTtsTestResult(result);
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } finally {
+      setIsTestingTts(false);
     }
   };
 
@@ -232,6 +254,50 @@ export default function ConfigureApiScreen() {
             >
               {braveTestResult.success ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
               <span>{braveTestResult.message}</span>
+            </div>
+          )}
+        </Section>
+
+        {/* TTS API */}
+        <Section icon={Headphones} title="OpenAI TTS API Key">
+          <div className="relative">
+            <input
+              type={showTtsKey ? 'text' : 'password'}
+              value={ttsApiKey}
+              onChange={(e) => setTtsApiKey(e.target.value)}
+              placeholder="sk-..."
+              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+            />
+            <button
+              onClick={() => setShowTtsKey((prev) => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-slate-700 text-slate-400 transition-colors"
+              title={showTtsKey ? 'Hide API key' : 'Show API key'}
+            >
+              {showTtsKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Your OpenAI API key for text-to-speech generation (gpt-4o-mini-tts model). This can be the same as your LLM key or a separate key. Stored locally on your device.
+          </p>
+          <button
+            onClick={handleTestTts}
+            disabled={isTestingTts || !ttsApiKey.trim()}
+            className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 border border-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isTestingTts ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
+            {isTestingTts ? 'Testing...' : 'Test TTS Connection'}
+          </button>
+          {ttsTestResult && (
+            <div
+              className={cn(
+                'mt-2 flex items-center gap-3 px-3 py-2 rounded-lg border text-sm',
+                ttsTestResult.success
+                  ? 'bg-green-900/20 border-green-500/30 text-green-300'
+                  : 'bg-red-900/20 border-red-500/30 text-red-300'
+              )}
+            >
+              {ttsTestResult.success ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+              <span>{ttsTestResult.message}</span>
             </div>
           )}
         </Section>

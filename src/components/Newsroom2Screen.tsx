@@ -11,7 +11,7 @@ import { biasOptions, biasAgent1Instructions } from '../data/bias';
 import { BiasSelector } from './BiasSelector';
 import { CountryMap } from './CountryMap';
 import { CountrySearch } from './CountrySearch';
-import { loadApiConfig, loadBraveApiKey } from '../lib/apiConfig';
+import { loadApiConfig, loadBraveApiKey, loadTtsApiKey } from '../lib/apiConfig';
 import { BRAVE_SUPPORTED_COUNTRIES } from '../lib/newsSearch';
 import { buildSessionConfig } from '../lib/sessionConfig';
 import type { SessionConfig } from '../lib/sessionConfig';
@@ -50,8 +50,8 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
 
   // Check API keys on mount
   useEffect(() => {
-    Promise.all([loadApiConfig(), loadBraveApiKey()]).then(([llmConfig, braveKey]) => {
-      setHasApiKey(!!llmConfig.apiKey.trim() && !!braveKey.trim());
+    Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey()]).then(([llmConfig, braveKey, ttsKey]) => {
+      setHasApiKey(!!llmConfig.apiKey.trim() && !!braveKey.trim() && !!ttsKey.trim());
     });
   }, []);
 
@@ -104,7 +104,7 @@ export default function Newsroom2Screen({ sessionContext: _sessionContext, onSes
       return;
     }
     try {
-      const audio = new Audio(`./audio/voices/${voice.id}.mp3`);
+      const audio = new Audio(`./audio/voices/${voice.id}.wav`);
       voiceAudioRef.current = audio;
       audio.addEventListener('ended', () => {
         setPlayingVoiceId(null);

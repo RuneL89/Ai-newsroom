@@ -6,7 +6,9 @@ import type { PipelineState, StageId } from '../../lib/pipelineTypes';
 import type { SessionConfig } from '../../lib/sessionConfig';
 import StageStrip from './StageStrip';
 import StageDetail from './StageDetail';
-import { Play, Square, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { base64ToArrayBuffer } from '../../lib/audioAssembler';
+import { readAudioFile } from '../../lib/fileManager';
+import { Play, Square, Loader2, AlertCircle, CheckCircle2, Headphones, Pause } from 'lucide-react';
 
 interface PipelinePanelProps {
   sessionConfig: SessionConfig;
@@ -26,6 +28,9 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     hasRunTopicLoop: false,
   });
 
+  const [podcastUrl, setPodcastUrl] = useState<string | null>(null);
+  const [isPlayingPodcast, setIsPlayingPodcast] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const runnerRef = useRef<PipelineRunner | null>(null);
 
   // Auto-select the current running stage
@@ -41,8 +46,20 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
       onStateChange: (newState) => {
         setState((prev) => ({ ...prev, ...newState, selectedStageId: prev.selectedStageId }));
       },
-      onComplete: (draft) => {
+      onComplete: async (draft) => {
         console.log('Pipeline complete:', draft);
+        // Try to load the produced podcast
+        try {
+          const base64 = await readAudioFile('podcast.wav');
+          if (base64) {
+            const arrayBuffer = base64ToArrayBuffer(base64);
+            const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            setPodcastUrl(url);
+          }
+        } catch (err) {
+          console.error('Failed to load podcast:', err);
+        }
       },
       onError: (error) => {
         console.error('Pipeline error:', error);
@@ -60,6 +77,37 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
   const handleSelectStage = useCallback((id: string) => {
     setState((prev) => ({ ...prev, selectedStageId: id as StageId }));
   }, []);
+
+  const handlePlayPodcast = useCallback(() => {
+    if (!podcastUrl) return;
+    if (audioRef.current) {
+      audioRef.current.play();
+      setIsPlayingPodcast(true);
+      return;
+    }
+    const audio = new Audio(podcastUrl);
+    audio.addEventListener('ended', () => setIsPlayingPodcast(false));
+    audio.addEventListener('pause', () => setIsPlayingPodcast(false));
+    audio.addEventListener('error', () => setIsPlayingPodcast(false));
+    audioRef.current = audio;
+    audio.play();
+    setIsPlayingPodcast(true);
+  }, [podcastUrl]);
+
+  const handlePausePodcast = useCallback(() => {
+    audioRef.current?.pause();
+    setIsPlayingPodcast(false);
+  }, []);
+
+  // Clean up podcast URL on unmount
+  useEffect(() => {
+    return () => {
+      if (podcastUrl) {
+        URL.revokeObjectURL(podcastUrl);
+      }
+      audioRef.current = null;
+    };
+  }, [podcastUrl]);
 
   const selectedStage = state.stages.find((s) => s.id === state.selectedStageId) || null;
 
@@ -102,7 +150,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
         </div>
       </div>
 
-      {/* Run / Stop buttons */}
+      {/* Run / Stop / Play Podcast buttons */}
       <div className="flex gap-2">
         {state.status === 'running' ? (
           <button
@@ -133,6 +181,21 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
                 Run Full Pipeline
               </>
             )}
+          </button>
+        )}
+
+        {state.status === 'complete' && podcastUrl && (
+          <button
+            onClick={isPlayingPodcast ? handlePausePodcast : handlePlayPodcast}
+            className={cn(
+              'flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border',
+              isPlayingPodcast
+                ? 'bg-amber-600/20 border-amber-500/50 text-amber-300 hover:bg-amber-600/30'
+                : 'bg-blue-600/20 border-blue-500/50 text-blue-300 hover:bg-blue-600/30'
+            )}
+          >
+            {isPlayingPodcast ? <Pause className="w-4 h-4" /> : <Headphones className="w-4 h-4" />}
+            {isPlayingPodcast ? 'Pause' : 'Play Podcast'}
           </button>
         )}
       </div>

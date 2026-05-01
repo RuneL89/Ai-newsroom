@@ -209,3 +209,54 @@ export async function getSegmentInfo(id: SegmentId): Promise<{ exists: boolean; 
     return { exists: false, size: 0 };
   }
 }
+
+/**
+ * Write an audio file as base64.
+ */
+export async function writeAudioFile(filename: string, base64Data: string): Promise<void> {
+  const dir = await getTargetDirectory();
+  const path = `${BASE_DIR}/${filename}`;
+  try {
+    await Filesystem.writeFile({
+      path,
+      data: base64Data,
+      directory: dir,
+      recursive: true,
+    });
+  } catch (err) {
+    console.error(`[fileManager] Failed to write audio ${path}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Read an audio file as base64.
+ */
+export async function readAudioFile(filename: string): Promise<string> {
+  const dir = await getTargetDirectory();
+  const path = `${BASE_DIR}/${filename}`;
+  try {
+    const result = await Filesystem.readFile({
+      path,
+      directory: dir,
+    });
+    return result.data as string;
+  } catch (err) {
+    console.error(`[fileManager] Failed to read audio ${path}:`, err);
+    return '';
+  }
+}
+
+/**
+ * Check if an audio file exists.
+ */
+export async function audioFileExists(filename: string): Promise<boolean> {
+  const dir = await getTargetDirectory();
+  const path = `${BASE_DIR}/${filename}`;
+  try {
+    await Filesystem.stat({ path, directory: dir });
+    return true;
+  } catch {
+    return false;
+  }
+}

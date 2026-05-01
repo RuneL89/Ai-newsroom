@@ -18,7 +18,7 @@ You configure:
 - **Country** — 195 countries with local language and native news sources
 - **Timeframe** — Daily briefing, weekly review, or monthly roundup
 - **Topics** — Exactly 3 from politics, economy, sport, technology, crime, and more
-- **Voice** — Professional narrators with distinct accents and personalities
+- **Voice** — Four OpenAI TTS voices (Onyx, Fable, Nova, Coral) with distinct personalities and preview audio
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
@@ -32,7 +32,7 @@ Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 | 4 | **Segment Writer** | ✅ Real | Called ONLY when a topic fails Segment Editor audit. Rewrites one topic at a time. Reads target segment + adjacent segments for transition context. |
 | 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the sequential topic loop (starts first — topics already exist from Researcher). Evaluates only the 7 topic-level requirements. Reads the individual `topicN.txt` file, NOT `full_script.txt`. |
 | 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes to Full Script Editor for second-pass coherence/bias verification. |
-| 7 | **Audio Producer** | ⏳ Stub | Strips XML tags, generates narration with the selected voice, mixes music stings, and assembles the final MP3 |
+| 7 | **Audio Producer** | ✅ Real | Reads all segment files, strips XML tags and music cues, generates narration via OpenAI TTS (`gpt-4o-mini-tts`) with voice-specific instructions, inserts music stings between segments, concatenates into a single WAV podcast file |
 
 Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, the **first draft** (for the Researcher), and the **structured audit** (for Editors). If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
@@ -150,7 +150,7 @@ Reads the assembled `full_script.txt` after all topic rewrites. Performs the sam
 Called only when Pass 2 rejects. Same constraints as Step 2a — fixes script-wide issues only, preserves all topic content. Loops back to Step 11 for re-audit. After Pass 2 approves, the pipeline proceeds directly to Audio Producer — the topic loop does NOT re-run.
 
 **Step 12 — Audio Producer**
-Strips XML tags from `full_script.txt` for TTS. Generates narration with the selected voice, mixes music stings and transitions, and assembles the final audio file. Pipeline complete.
+Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.). Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Fetches music sting files (intro, story, block, outro) and concatenates everything sequentially using the Web Audio API — music sting → 0.5s gap → narration — ensuring music and narration never overlap. Exports the final mix as a single WAV file (`podcast.wav`) saved to device storage. A **Play Podcast** button appears in the UI when complete. Pipeline complete.
 
 ### Rejection Loops
 
@@ -322,6 +322,11 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 ├── ai-newsroom/              # Static assets & public files
 │   ├── assets/               # Image & media assets
 │   ├── audio/                # Podcast audio previews & music samples
+│   │   ├── voices/             # OpenAI TTS voice previews (.wav)
+│   │   │   ├── onyx.wav
+│   │   │   ├── fable.wav
+│   │   │   ├── nova.wav
+│   │   │   └── coral.wav
 │   ├── index.html            # Static HTML fallback
 │   └── logo.png              # Application logo
 ├── android/                  # Capacitor Android project
@@ -338,7 +343,7 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   │   ├── segmentWriter.ts       # Segment Writer — targeted rewrite of failing segments only
 │   │   ├── segmentEditor.ts       # Segment Editor — audits rewritten segments + transitions
 │   │   ├── assembler.ts           # Assembler — pure code concatenation of segments into full_script.txt
-│   │   ├── stubs/                 # Stub agents for pipeline testing (Audio Producer)
+│   │   ├── audioProducer.ts       # Real Audio Producer — OpenAI TTS + Web Audio concatenation
 │   │   │   └── agent6Stub.ts
 │   │   └── index.ts               # Agent map factory
 │   ├── components/           # React UI components
