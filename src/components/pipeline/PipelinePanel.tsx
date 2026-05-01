@@ -6,8 +6,7 @@ import type { PipelineState, StageId } from '../../lib/pipelineTypes';
 import type { SessionConfig } from '../../lib/sessionConfig';
 import StageStrip from './StageStrip';
 import StageDetail from './StageDetail';
-import { base64ToArrayBuffer } from '../../lib/audioAssembler';
-import { readAudioFile } from '../../lib/fileManager';
+import { readAudioFileBinary } from '../../lib/fileManager';
 import { loadTestMode } from '../../lib/apiConfig';
 import { Play, Square, Loader2, AlertCircle, CheckCircle2, Headphones, Pause } from 'lucide-react';
 
@@ -57,10 +56,9 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
         console.log('Pipeline complete:', draft);
         // Try to load the produced podcast
         try {
-          const base64 = await readAudioFile('podcast.wav');
-          if (base64) {
-            const arrayBuffer = base64ToArrayBuffer(base64);
-            const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+          const bytes = await readAudioFileBinary('podcast.mp3');
+          if (bytes) {
+            const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'audio/mpeg' });
             const url = URL.createObjectURL(blob);
             setPodcastUrl(url);
           }

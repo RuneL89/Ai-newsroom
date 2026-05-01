@@ -1,6 +1,5 @@
 import type { AgentFn } from '../lib/pipelineTypes';
 import { readAllSegments } from '../lib/fileManager';
-import { writeAudioFile } from '../lib/fileManager';
 import { producePodcast } from '../lib/audioAssembler';
 import { loadTtsApiKey } from '../lib/apiConfig';
 import { voiceInstructions } from '../data/voices';
@@ -39,7 +38,7 @@ export function createAudioProducer(): AgentFn {
 
     const instructions = voiceInstructions[voice.voiceId] ?? '';
 
-    // Produce podcast
+    // Produce podcast (file is written incrementally to disk)
     const result = await producePodcast(
       segments,
       voice,
@@ -49,16 +48,13 @@ export function createAudioProducer(): AgentFn {
       (msg) => onReasoningChunk(msg + '\n')
     );
 
-    // Save to disk
-    onReasoningChunk(`Saving podcast to storage...\n`);
-    await writeAudioFile(result.podcastFileName, result.podcastBase64);
     onReasoningChunk(`Saved ${result.podcastFileName}\n`);
 
     const draft = `## AUDIO PRODUCTION COMPLETE
 
 **Final Podcast:** ${result.podcastFileName}
 **Duration:** ${formatDuration(result.durationSeconds)}
-**Format:** WAV (44.1kHz stereo)
+**Format:** MP3 (44.1kHz stereo, 128kbps)
 **Segments processed:** ${result.segmentCount}
 
 ### Voice
@@ -83,7 +79,6 @@ Music and narration NEVER overlap. All segments play sequentially with ${0.5}s g
         segmentCount: result.segmentCount,
         voiceId: voice.voiceId,
         voiceLabel: voice.label,
-        fileSizeMB: (result.podcastBase64.length * 0.75 / 1024 / 1024).toFixed(2),
       },
     };
   };

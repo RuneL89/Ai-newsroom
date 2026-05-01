@@ -260,3 +260,71 @@ export async function audioFileExists(filename: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Create an empty audio file on disk.
+ */
+export async function createAudioFile(filename: string): Promise<void> {
+  const dir = await getTargetDirectory();
+  const path = `${BASE_DIR}/${filename}`;
+  try {
+    await Filesystem.writeFile({
+      path,
+      data: '',
+      directory: dir,
+      recursive: true,
+    });
+  } catch (err) {
+    console.error(`[fileManager] Failed to create audio file ${path}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Append a binary chunk to an audio file.
+ * The Uint8Array is converted to base64 for Capacitor Filesystem.
+ */
+export async function appendAudioChunk(filename: string, chunk: Uint8Array | Int8Array): Promise<void> {
+  const dir = await getTargetDirectory();
+  const path = `${BASE_DIR}/${filename}`;
+  // Convert small chunk to base64 (chunk is typically a few KB)
+  let binary = '';
+  for (let i = 0; i < chunk.length; i++) {
+    binary += String.fromCharCode(chunk[i]);
+  }
+  const base64 = btoa(binary);
+  try {
+    await Filesystem.appendFile({
+      path,
+      data: base64,
+      directory: dir,
+    });
+  } catch (err) {
+    console.error(`[fileManager] Failed to append audio chunk to ${path}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Read an audio file as a Uint8Array.
+ */
+export async function readAudioFileBinary(filename: string): Promise<Uint8Array | null> {
+  const dir = await getTargetDirectory();
+  const path = `${BASE_DIR}/${filename}`;
+  try {
+    const result = await Filesystem.readFile({
+      path,
+      directory: dir,
+    });
+    const base64 = result.data as string;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  } catch (err) {
+    console.error(`[fileManager] Failed to read audio binary ${path}:`, err);
+    return null;
+  }
+}
