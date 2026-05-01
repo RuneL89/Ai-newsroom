@@ -278,6 +278,21 @@ export async function testTtsApiKey(key: string): Promise<{ success: boolean; me
   }
 }
 
+const TEST_MODE_KEY = 'test_mode_enabled';
+
+export async function loadTestMode(): Promise<boolean> {
+  try {
+    const { value } = await Preferences.get({ key: TEST_MODE_KEY });
+    return value === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function saveTestMode(enabled: boolean): Promise<void> {
+  await Preferences.set({ key: TEST_MODE_KEY, value: String(enabled) });
+}
+
 export async function testBraveApiKey(key: string): Promise<{ success: boolean; message: string }> {
   try {
     if (!key.trim()) {

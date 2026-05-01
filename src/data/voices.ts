@@ -4,32 +4,32 @@ export const voices: Voice[] = [
   {
     id: 'onyx',
     voiceId: 'onyx',
-    label: 'Onyx',
-    description: 'Serious news broadcaster — low, steady, authoritative',
+    label: 'Marcus',
+    description: 'Serious news broadcaster',
     gender: 'male',
     accent: 'American'
   },
   {
     id: 'fable',
     voiceId: 'fable',
-    label: 'Fable',
-    description: 'High-energy podcast host — rapid, dramatic, punchy',
+    label: 'Dexter',
+    description: 'High-energy podcast host',
     gender: 'male',
     accent: 'American'
   },
   {
     id: 'nova',
     voiceId: 'nova',
-    label: 'Nova',
-    description: 'Warm talkshow host — casual, playful, conversational',
+    label: 'Chloe',
+    description: 'Warm talkshow host',
     gender: 'female',
     accent: 'American'
   },
   {
     id: 'coral',
     voiceId: 'coral',
-    label: 'Coral',
-    description: 'Wire-service correspondent — clear, objective, neutral',
+    label: 'Sarah',
+    description: 'Wire-service correspondent',
     gender: 'female',
     accent: 'American'
   }

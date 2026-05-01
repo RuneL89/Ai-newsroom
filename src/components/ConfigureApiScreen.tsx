@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Search, FolderOpen, Headphones } from 'lucide-react';
+import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Search, FolderOpen, Headphones, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { loadApiConfig, saveApiConfig, testApiConnection, loadBraveApiKey, saveBraveApiKey, testBraveApiKey, loadTtsApiKey, saveTtsApiKey, testTtsApiKey, providerOptions } from '../lib/apiConfig';
+import { loadApiConfig, saveApiConfig, testApiConnection, loadBraveApiKey, saveBraveApiKey, testBraveApiKey, loadTtsApiKey, saveTtsApiKey, testTtsApiKey, loadTestMode, saveTestMode, providerOptions } from '../lib/apiConfig';
 import { isExternalStorageEnabled, setExternalStorageEnabled } from '../lib/fileManager';
 import type { ApiConfig, ApiProvider } from '../types';
 
@@ -26,16 +26,18 @@ export default function ConfigureApiScreen() {
   const [isTestingTts, setIsTestingTts] = useState(false);
   const [ttsTestResult, setTtsTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [useExternalStorage, setUseExternalStorage] = useState(false);
+  const [testMode, setTestMode] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey(), isExternalStorageEnabled()]).then(([loaded, braveKey, ttsKey, externalStorage]) => {
+    Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey(), isExternalStorageEnabled(), loadTestMode()]).then(([loaded, braveKey, ttsKey, externalStorage, testModeEnabled]) => {
       if (!cancelled) {
         setConfig(loaded);
         setBraveApiKey(braveKey);
         setTtsApiKey(ttsKey);
         setUseExternalStorage(externalStorage);
+        setTestMode(testModeEnabled);
         setIsLoaded(true);
       }
     });
@@ -59,6 +61,7 @@ export default function ConfigureApiScreen() {
         saveApiConfig(config),
         saveBraveApiKey(braveApiKey),
         saveTtsApiKey(ttsApiKey),
+        saveTestMode(testMode),
         setExternalStorageEnabled(useExternalStorage),
       ]);
       toast.success('API configuration saved!');
@@ -300,6 +303,33 @@ export default function ConfigureApiScreen() {
               <span>{ttsTestResult.message}</span>
             </div>
           )}
+        </Section>
+
+        {/* Test Mode */}
+        <Section icon={Zap} title="Test Mode">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="text-sm text-slate-200">Skip Editor Loop</div>
+              <p className="text-xs text-slate-500">
+                When enabled, the pipeline runs Agent 1 (Researcher) and then jumps straight to Agent 6 (Audio Producer),
+                skipping all editors, writers, and the assembler. Useful for quickly testing voice and music combinations.
+              </p>
+            </div>
+            <button
+              onClick={() => setTestMode((prev) => !prev)}
+              className={cn(
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                testMode ? 'bg-amber-500' : 'bg-slate-600'
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  testMode ? 'translate-x-6' : 'translate-x-1'
+                )}
+              />
+            </button>
+          </div>
         </Section>
 
         {/* File Storage */}

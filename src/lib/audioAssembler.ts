@@ -1,9 +1,12 @@
 import type { SegmentId } from './fileManager';
 import type { Voice } from '../types';
+import { validateMechanical } from './mechanicalValidator';
 
 const SAMPLE_RATE = 44100;
 const GAP_SECONDS = 0.5;
 const PODCAST_FILENAME = 'podcast.wav';
+const TTS_CHAR_LIMIT = 4000;
+const TTS_CHUNK_TARGET = 3000;
 
 const MUSIC_ID_TO_FILE_PREFIX: Record<string, string> = {
   orch_a: 'orch_a',
@@ -206,6 +209,64 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/**
+ * Check if text exceeds the TTS character limit.
+ * Uses the same mechanical validator as the Segment Editor.
+ */
+function exceedsTtsLimit(text: string): boolean {
+  const mech = validateMechanical(text);
+  return mech.length.actual > TTS_CHAR_LIMIT;
+}
+
+/**
+ * Split text into chunks under the target length, splitting at the closest period.
+ * Prefers to end chunks at sentence boundaries (period + space).
+ */
+function splitTextAtPeriod(text: string, targetLength: number): string[] {
+  if (text.length <= targetLength) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text.trim();
+
+  while (remaining.length > targetLength) {
+    // Look for the last period+space before targetLength
+    let splitIndex = -1;
+    for (let i = targetLength; i >= 0; i--) {
+      if (remaining[i] === '.' && (i + 1 >= remaining.length || remaining[i + 1] === ' ' || remaining[i + 1] === '\n')) {
+        splitIndex = i + 1;
+        break;
+      }
+    }
+
+    // If no period found, fall back to the last space before targetLength
+    if (splitIndex <= 0) {
+      for (let i = targetLength; i >= 0; i--) {
+        if (remaining[i] === ' ' || remaining[i] === '\n') {
+          splitIndex = i;
+          break;
+        }
+      }
+    }
+
+    // Absolute fallback: hard split at targetLength
+    if (splitIndex <= 0) {
+      splitIndex = targetLength;
+    }
+
+    const chunk = remaining.slice(0, splitIndex).trim();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+    remaining = remaining.slice(splitIndex).trim();
+  }
+
+  if (remaining.length > 0) {
+    chunks.push(remaining);
+  }
+
+  return chunks;
+}
+
 export interface ProducePodcastResult {
   podcastBase64: string;
   segmentCount: number;
@@ -260,17 +321,42 @@ export async function producePodcast(
     }
 
     if (narrationText.trim().length > 0) {
-      onProgress(`Generating TTS for ${label} (${narrationText.length} chars)...`);
-      const narrationBuf = await ttsToBuffer(
-        narrationText,
-        voice.voiceId,
-        ttsApiKey,
-        voiceInstructions,
-        SAMPLE_RATE
-      );
-      buffers.push(narrationBuf);
-      segmentCount++;
-      onProgress(`  TTS done (${(narrationBuf.duration).toFixed(1)}s)`);
+      // Check if segment exceeds TTS limit using the same validator as Segment Editor
+      if (exceedsTtsLimit(narrationText)) {
+        const chunks = splitTextAtPeriod(narrationText, TTS_CHUNK_TARGET);
+        onProgress(`Generating TTS for ${label} (${narrationText.length} chars) — split into ${chunks.length} chunks...`);
+        const chunkBuffers: AudioBuffer[] = [];
+        for (let i = 0; i < chunks.length; i++) {
+          onProgress(`  Chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
+          const chunkBuf = await ttsToBuffer(
+            chunks[i],
+            voice.voiceId,
+            ttsApiKey,
+            voiceInstructions,
+            SAMPLE_RATE
+          );
+          chunkBuffers.push(chunkBuf);
+        }
+        // Concatenate chunks with no gap (same narration segment)
+        if (chunkBuffers.length > 0) {
+          const combinedNarration = concatenateBuffers(chunkBuffers, 0, SAMPLE_RATE);
+          buffers.push(combinedNarration);
+          segmentCount++;
+          onProgress(`  TTS done (${(combinedNarration.duration).toFixed(1)}s)`);
+        }
+      } else {
+        onProgress(`Generating TTS for ${label} (${narrationText.length} chars)...`);
+        const narrationBuf = await ttsToBuffer(
+          narrationText,
+          voice.voiceId,
+          ttsApiKey,
+          voiceInstructions,
+          SAMPLE_RATE
+        );
+        buffers.push(narrationBuf);
+        segmentCount++;
+        onProgress(`  TTS done (${(narrationBuf.duration).toFixed(1)}s)`);
+      }
     }
   };
 

@@ -8,6 +8,7 @@ import StageStrip from './StageStrip';
 import StageDetail from './StageDetail';
 import { base64ToArrayBuffer } from '../../lib/audioAssembler';
 import { readAudioFile } from '../../lib/fileManager';
+import { loadTestMode } from '../../lib/apiConfig';
 import { Play, Square, Loader2, AlertCircle, CheckCircle2, Headphones, Pause } from 'lucide-react';
 
 interface PipelinePanelProps {
@@ -30,8 +31,14 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
 
   const [podcastUrl, setPodcastUrl] = useState<string | null>(null);
   const [isPlayingPodcast, setIsPlayingPodcast] = useState(false);
+  const [testMode, setTestMode] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const runnerRef = useRef<PipelineRunner | null>(null);
+
+  // Load test mode preference on mount
+  useEffect(() => {
+    loadTestMode().then(setTestMode);
+  }, []);
 
   // Auto-select the current running stage
   useEffect(() => {
@@ -67,7 +74,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     });
 
     runnerRef.current = runner;
-    runner.run(sessionConfig);
+    runner.run(sessionConfig, testMode);
   }, [sessionConfig]);
 
   const handleStop = useCallback(() => {

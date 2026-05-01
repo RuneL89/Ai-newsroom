@@ -45,6 +45,7 @@ export class PipelineRunner {
   private agents: AgentMap;
   private sessionConfig: SessionConfig | null = null;
   private abortController: AbortController | null = null;
+  private testMode: boolean = false;
 
   constructor(agents: AgentMap, callbacks: PipelineCallbacks) {
     this.agents = agents;
@@ -77,8 +78,9 @@ export class PipelineRunner {
     this.updateState({ stages });
   }
 
-  async run(sessionConfig: SessionConfig) {
+  async run(sessionConfig: SessionConfig, testMode: boolean = false) {
     this.abortController = new AbortController();
+    this.testMode = testMode;
     await PipelineNotifications.start('Starting pipeline...');
     await PipelineService.start();
     this.updateState({
@@ -273,8 +275,12 @@ export class PipelineRunner {
     const totalTopics = this.sessionConfig?.editorial.includeSegment ? 7 : 6;
 
     switch (current) {
-      case 'agent1':
+      case 'agent1': {
+        if (this.testMode) {
+          return 'agent6';
+        }
         return 'fullScriptEditor';
+      }
 
       case 'fullScriptEditor': {
         if (m.approval_status === 'REJECTED') {
