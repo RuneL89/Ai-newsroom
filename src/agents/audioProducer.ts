@@ -4,6 +4,7 @@ import { writeAudioFile } from '../lib/fileManager';
 import { producePodcast } from '../lib/audioAssembler';
 import { loadTtsApiKey } from '../lib/apiConfig';
 import { voiceInstructions } from '../data/voices';
+import { musicStyles } from '../data/music';
 
 export function createAudioProducer(): AgentFn {
   return async (ctx, onReasoningChunk) => {
@@ -24,7 +25,8 @@ export function createAudioProducer(): AgentFn {
 
     onReasoningChunk(`Voice selected: ${voice.label} (${voice.voiceId})\n`);
     if (musicSuite) {
-      onReasoningChunk(`Music suite: Intro=${musicSuite.intro}, Outro=${musicSuite.outro}, Story=${musicSuite.storySting}, Block=${musicSuite.blockSting}\n`);
+      const musicName = (id: string) => musicStyles.find(s => s.id === id)?.name ?? id;
+      onReasoningChunk(`Music suite: Intro=${musicName(musicSuite.intro)}, Outro=${musicName(musicSuite.outro)}, Story=${musicName(musicSuite.storySting)}, Block=${musicName(musicSuite.blockSting)}\n`);
     } else {
       onReasoningChunk('No music suite configured. Producing narration only.\n');
     }

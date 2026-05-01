@@ -115,10 +115,10 @@ export function buildSessionConfig(params: BuildSessionConfigParams): SessionCon
       },
       musicSuite: params.musicSuite
         ? {
-            intro: params.musicSuite.intro.name,
-            outro: params.musicSuite.outro.name,
-            storySting: params.musicSuite.storySting.name,
-            blockSting: params.musicSuite.blockSting.name,
+            intro: params.musicSuite.intro.id,
+            outro: params.musicSuite.outro.id,
+            storySting: params.musicSuite.storySting.id,
+            blockSting: params.musicSuite.blockSting.id,
           }
         : undefined,
     },

@@ -4,6 +4,7 @@ import {
   THEME_COMPLETENESS_REQUIREMENTS,
 } from './shared/completenessRequirements';
 import { biasAgent1Instructions, biasEditorialGuidelines } from '../data/bias';
+import { musicStyles } from '../data/music';
 import type { NewsArticle } from '../lib/newsSearch';
 
 function replacePlaceholders(template: string, config: SessionConfig): string {
@@ -57,12 +58,13 @@ ${continentCtx}`;
   }).join('\n\n---\n\n');
 
   const musicSuite = config.content.musicSuite;
+  const musicNameById = (id: string) => musicStyles.find(s => s.id === id)?.name ?? id;
   const musicInstructions = musicSuite
     ? `**MUSIC CUES** (insert exactly as shown):
-- Opening: [INTRO: ${musicSuite.intro}]
-- Between each theme: [STORY STING: ${musicSuite.storySting}]
-- Between local and continent blocks: [BLOCK TRANSITION: ${musicSuite.blockSting}]
-- Closing: [OUTRO: ${musicSuite.outro}]`
+- Opening: [INTRO: ${musicNameById(musicSuite.intro)}]
+- Between each theme: [STORY STING: ${musicNameById(musicSuite.storySting)}]
+- Between local and continent blocks: [BLOCK TRANSITION: ${musicNameById(musicSuite.blockSting)}]
+- Closing: [OUTRO: ${musicNameById(musicSuite.outro)}]`
     : '';
 
   const editorialSegment = config.editorial.includeSegment
