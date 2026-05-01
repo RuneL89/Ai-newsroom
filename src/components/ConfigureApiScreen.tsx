@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import { Settings, Key, Globe, Cpu, Save, TestTube, Eye, EyeOff, Loader2, CheckCircle, XCircle, Search, FolderOpen, Headphones, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { loadApiConfig, saveApiConfig, testApiConnection, loadBraveApiKey, saveBraveApiKey, testBraveApiKey, loadTtsApiKey, saveTtsApiKey, testTtsApiKey, loadTestMode, saveTestMode, providerOptions } from '../lib/apiConfig';
-import { isExternalStorageEnabled, setExternalStorageEnabled } from '../lib/fileManager';
 import type { ApiConfig, ApiProvider } from '../types';
 
 export default function ConfigureApiScreen() {
@@ -25,18 +24,17 @@ export default function ConfigureApiScreen() {
   const [braveTestResult, setBraveTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTestingTts, setIsTestingTts] = useState(false);
   const [ttsTestResult, setTtsTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [useExternalStorage, setUseExternalStorage] = useState(false);
+
   const [testMode, setTestMode] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey(), isExternalStorageEnabled(), loadTestMode()]).then(([loaded, braveKey, ttsKey, externalStorage, testModeEnabled]) => {
+    Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey(), loadTestMode()]).then(([loaded, braveKey, ttsKey, testModeEnabled]) => {
       if (!cancelled) {
         setConfig(loaded);
         setBraveApiKey(braveKey);
         setTtsApiKey(ttsKey);
-        setUseExternalStorage(externalStorage);
         setTestMode(testModeEnabled);
         setIsLoaded(true);
       }
@@ -62,7 +60,7 @@ export default function ConfigureApiScreen() {
         saveBraveApiKey(braveApiKey),
         saveTtsApiKey(ttsApiKey),
         saveTestMode(testMode),
-        setExternalStorageEnabled(useExternalStorage),
+
       ]);
       toast.success('API configuration saved!');
     } catch {
@@ -334,28 +332,13 @@ export default function ConfigureApiScreen() {
 
         {/* File Storage */}
         <Section icon={FolderOpen} title="File Storage">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="text-sm text-slate-200">Use External Storage</div>
-              <p className="text-xs text-slate-500">
-                Save segment files to Documents folder instead of app-private storage.
-                On Android, this requires storage permission. Default (off) uses private app storage with no permission needed.
-              </p>
-            </div>
-            <button
-              onClick={() => setUseExternalStorage((prev) => !prev)}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                useExternalStorage ? 'bg-blue-500' : 'bg-slate-600'
-              )}
-            >
-              <span
-                className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                  useExternalStorage ? 'translate-x-6' : 'translate-x-1'
-                )}
-              />
-            </button>
+          <div className="space-y-1">
+            <div className="text-sm text-slate-200">Storage Location</div>
+            <p className="text-xs text-slate-500">
+              All files are saved to app-private storage. This works without any
+              permissions and is the only reliable option on Android 10+ due to
+              scoped storage restrictions.
+            </p>
           </div>
         </Section>
 

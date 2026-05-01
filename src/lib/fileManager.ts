@@ -1,8 +1,6 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { Preferences } from '@capacitor/preferences';
 
 const BASE_DIR = 'newsroom';
-const PREF_KEY = 'use_external_storage';
 
 export type SegmentId = 'intro' | 'topic1' | 'topic2' | 'topic3' | 'topic4' | 'topic5' | 'topic6' | 'topic7' | 'outro';
 
@@ -24,27 +22,11 @@ export const SEGMENT_FILE_NAMES: Record<SegmentId, string> = {
 
 /**
  * Get the directory to use for file storage.
- * Defaults to Directory.Data (app-private, no permissions needed).
- * If user toggles external storage AND grants permission, uses Directory.Documents.
+ * Always uses Directory.Data (app-private) because external Documents storage
+ * is broken on Android 10+ due to scoped storage (EACCES).
  */
 async function getTargetDirectory(): Promise<Directory> {
-  const { value } = await Preferences.get({ key: PREF_KEY });
-  return value === 'true' ? Directory.Documents : Directory.Data;
-}
-
-/**
- * Check if external storage is enabled.
- */
-export async function isExternalStorageEnabled(): Promise<boolean> {
-  const { value } = await Preferences.get({ key: PREF_KEY });
-  return value === 'true';
-}
-
-/**
- * Toggle external storage preference.
- */
-export async function setExternalStorageEnabled(enabled: boolean): Promise<void> {
-  await Preferences.set({ key: PREF_KEY, value: String(enabled) });
+  return Directory.Data;
 }
 
 /**
