@@ -18,7 +18,7 @@ You configure:
 - **Country** — 195 countries with local language and native news sources
 - **Timeframe** — Daily briefing, weekly review, or monthly roundup
 - **Topics** — Exactly 3 from politics, economy, sport, technology, crime, and more
-- **Voice** — Four OpenAI TTS voices (Onyx, Fable, Nova, Coral) with distinct personalities and preview audio
+- **Voice** — Four OpenAI TTS voices (Marcus/Onyx, Dexter/Fable, Chloe/Nova, Sarah/Coral) with distinct personalities and preview audio
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
@@ -32,7 +32,7 @@ Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 | 4 | **Segment Writer** | ✅ Real | Called ONLY when a topic fails Segment Editor audit. Rewrites one topic at a time. Reads target segment + adjacent segments for transition context. |
 | 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the sequential topic loop (starts first — topics already exist from Researcher). Evaluates only the 7 topic-level requirements. Reads the individual `topicN.txt` file, NOT `full_script.txt`. |
 | 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes to Full Script Editor for second-pass coherence/bias verification. |
-| 7 | **Audio Producer** | ✅ Real | Reads all segment files, strips XML tags and music cues, generates narration via OpenAI TTS (`gpt-4o-mini-tts`) with voice-specific instructions, inserts music stings between segments, concatenates into a single WAV podcast file |
+| 7 | **Audio Producer** | ✅ Real | Reads all segment files, strips XML tags and music cues, generates narration via OpenAI TTS (`gpt-4o-mini-tts`) with voice-specific instructions, mixes music stings between segments using streamed MP3 encoding (`lamejs`), produces a single MP3 podcast file |
 
 Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, the **first draft** (for the Researcher), and the **structured audit** (for Editors). If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
 
@@ -150,7 +150,7 @@ Reads the assembled `full_script.txt` after all topic rewrites. Performs the sam
 Called only when Pass 2 rejects. Same constraints as Step 2a — fixes script-wide issues only, preserves all topic content. Loops back to Step 11 for re-audit. After Pass 2 approves, the pipeline proceeds directly to Audio Producer — the topic loop does NOT re-run.
 
 **Step 12 — Audio Producer**
-Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.). Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Fetches music sting files (intro, story, block, outro) and concatenates everything sequentially using the Web Audio API — music sting → 0.5s gap → narration — ensuring music and narration never overlap. Exports the final mix as a single WAV file (`podcast.wav`) saved to device storage. A **Play Podcast** button appears in the UI when complete. Pipeline complete.
+Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.). Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Fetches music sting files (intro, story, block, outro) and renders each segment through the Web Audio API — music sting → 0.5s gap → narration — ensuring music and narration never overlap. Encodes to MP3 incrementally using `lamejs` and appends each segment to disk, keeping peak memory under ~26 MB regardless of podcast length. The finished file is named dynamically (e.g. `United States Daily Report - 2026-04-27.mp3`) and auto-exported to `Documents/Newsroom` when possible. A **Play Podcast** button appears in the UI when complete. Pipeline complete.
 
 ### Rejection Loops
 
@@ -177,7 +177,8 @@ All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 - **Rejection loops have no limit** — the pipeline prioritizes correctness over speed
 - **API failures retry 3 times** — then abort with a clear error
 - **Session context is ephemeral** — configuration exists only in memory for the current run; close the app and it disappears
-- **Segment files persist** — Every segment is written to `Directory.Data/newsroom/` via `@capacitor/filesystem`. Even if the app closes mid-run, the files remain for inspection.
+- **Segment files persist** — Every segment is written to app-private storage (`Directory.Data/newsroom/`) via `@capacitor/filesystem`. Even if the app closes mid-run, the files remain for inspection.
+- **Test mode** — A "Skip Editor Loop" toggle in Configure API bypasses all editors and writers, routing Agent 1 → Agent 6 directly. Fast for testing the TTS/audio pipeline without burning API credits on editorial loops.
 
 ### Editor Approval Rules
 
@@ -293,7 +294,7 @@ The pipeline UI is designed for phones:
 | Maps | Leaflet |
 | Build | Vite |
 | Mobile | Capacitor (Android APK) |
-| Storage | `@capacitor/preferences` (settings), `@capacitor/filesystem` (segment files in `Directory.Data/newsroom/`) |
+| Storage | `@capacitor/preferences` (settings), `@capacitor/filesystem` (segment files in app-private `Directory.Data/newsroom/`) |
 | News Search | Brave Search API (web search with `freshness` filtering) |
 | LLM API | OpenAI-compatible `/chat/completions` (SSE streaming) |
 | CI/CD | GitHub Actions |
@@ -414,7 +415,7 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 ## Usage
 
 1. **Configure your APIs** — Go to Configure API, add your LLM provider key AND your Brave Search API key, save and test both
-2. **Configure your podcast** — Go to Newsroom 2, pick a country, timeframe, **exactly 3 topics**, voice, music, and editorial angle
+2. **Configure your podcast** — Go to Newsroom, pick a country, timeframe, **exactly 3 topics**, voice, music, and editorial angle
 3. **Run Full Pipeline** — Tap the button and watch the agents work
 4. **Inspect stages** — Tap any stage card to see reasoning, the full LLM prompt, the first draft, the structured audit, and output
 
