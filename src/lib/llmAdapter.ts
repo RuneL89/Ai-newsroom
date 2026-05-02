@@ -21,10 +21,45 @@ interface ParameterFix {
   fix: (body: Record<string, unknown>) => Record<string, unknown> | null;
 }
 
+/**
+ * Build a regex that matches "unsupported parameter" error messages across
+ * multiple provider formats (OpenAI, Anthropic, Gemini, DeepSeek, Mistral,
+ * Bedrock, Ollama, etc.).
+ */
+function makeUnsupportedParamPattern(
+  paramNames: string[],
+  extraSuffix?: string
+): RegExp {
+  const q = paramNames.map((n) => `['"]?${n}['"]?`).join('|');
+  const parts = [
+    // OpenAI / Azure OpenAI style
+    `(?:Unsupported|Unknown|Unrecognized)\\s+(?:parameter|request argument(?:\\s+supplied)?):?\\s*(?:${q})`,
+    // DeepSeek / Anthropic style: "does not support the parameter 'X'"
+    `does not support(?: the)?(?: parameter)? (?:${q})`,
+    // Anthropic style: "does not support the X parameter"
+    `does not support(?: the)? (?:${q})(?:\\s+parameter)?`,
+    // Ollama / LiteLLM style: "does not support parameters: {'X': ...}"
+    `does not support(?: the)?\\s+parameters?:?[\\s\\S]*?(?:${q})`,
+    // Gemini native style: "X is not supported by/in/for this model"
+    `(?:${q})(?:\\s+parameter)?\\s+is not supported`,
+    // Gemini OpenAI-compatible style: "Unknown name 'X': Cannot find field"
+    `Unknown name (?:${q}): Cannot find field`,
+    // Mistral / Bedrock style: "X: Extra inputs are not permitted"
+    `(?:${q})(?:\\.\\w+)?: Extra inputs are not permitted`,
+    // Bedrock alternative: "extraneous key [X] is not permitted"
+    `extraneous key \\[(?:${q})\\] is not permitted`,
+  ];
+  const suffix = extraSuffix ? `(?:${extraSuffix})?` : '';
+  return new RegExp(`(?:${parts.join('|')})${suffix}`, 'i');
+}
+
 const KNOWN_FIXES: ParameterFix[] = [
   // OpenAI newer models (o1, o3, gpt-5.x) reject max_tokens
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?max_tokens['"]?(?:[\s\S]*?Use ['"]?max_completion_tokens['"]? instead)?/i,
+    pattern: makeUnsupportedParamPattern(
+      ['max_tokens'],
+      `[\\s\\S]*?Use ['"]?max_completion_tokens['"]? instead`
+    ),
     fix: (body) => {
       if (!('max_tokens' in body)) return null;
       const { max_tokens, ...rest } = body;
@@ -33,7 +68,10 @@ const KNOWN_FIXES: ParameterFix[] = [
   },
   // Some older models or non-OpenAI providers reject max_completion_tokens
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?max_completion_tokens['"]?(?:[\s\S]*?Use ['"]?max_tokens['"]? instead)?/i,
+    pattern: makeUnsupportedParamPattern(
+      ['max_completion_tokens'],
+      `[\\s\\S]*?Use ['"]?max_tokens['"]? instead`
+    ),
     fix: (body) => {
       if (!('max_completion_tokens' in body)) return null;
       const { max_completion_tokens, ...rest } = body;
@@ -42,7 +80,7 @@ const KNOWN_FIXES: ParameterFix[] = [
   },
   // Reasoning models often reject temperature
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?temperature['"]?/i,
+    pattern: makeUnsupportedParamPattern(['temperature']),
     fix: (body) => {
       if (!('temperature' in body)) return null;
       const { temperature, ...rest } = body;
@@ -51,7 +89,7 @@ const KNOWN_FIXES: ParameterFix[] = [
   },
   // Reasoning models often reject top_p
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?top_p['"]?/i,
+    pattern: makeUnsupportedParamPattern(['top_p']),
     fix: (body) => {
       if (!('top_p' in body)) return null;
       const { top_p, ...rest } = body;
@@ -60,7 +98,7 @@ const KNOWN_FIXES: ParameterFix[] = [
   },
   // Some providers reject thinking/thinking_type
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?thinking['"]?/i,
+    pattern: makeUnsupportedParamPattern(['thinking']),
     fix: (body) => {
       if (!('thinking' in body)) return null;
       const { thinking, ...rest } = body;
@@ -69,7 +107,7 @@ const KNOWN_FIXES: ParameterFix[] = [
   },
   // Frequency penalty / presence penalty
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?(?:frequency_penalty|presence_penalty)['"]?/i,
+    pattern: makeUnsupportedParamPattern(['frequency_penalty', 'presence_penalty']),
     fix: (body) => {
       const { frequency_penalty, presence_penalty, ...rest } = body;
       return rest;
@@ -77,7 +115,7 @@ const KNOWN_FIXES: ParameterFix[] = [
   },
   // Some providers (e.g. Ollama) don't support reasoning_effort
   {
-    pattern: /(?:Unsupported|Unknown|Unrecognized)\s+(?:parameter|request argument(?:\s+supplied)?):?\s*['"]?reasoning_effort['"]?/i,
+    pattern: makeUnsupportedParamPattern(['reasoning_effort']),
     fix: (body) => {
       if (!('reasoning_effort' in body)) return null;
       const { reasoning_effort, ...rest } = body;
