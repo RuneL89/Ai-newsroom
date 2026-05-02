@@ -1,5 +1,6 @@
 import { Preferences } from '@capacitor/preferences';
 import type { ApiConfig, ApiProvider } from '../types';
+import { fetchWithAdaptiveRetry, buildLlmBody } from './llmAdapter';
 
 const API_CONFIG_KEY = 'api_config';
 
@@ -46,23 +47,14 @@ export async function callLLM(
     ? `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
     : 'https://api.openai.com/v1/chat/completions';
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model || 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  const body = buildLlmBody(config.model || 'gpt-4o', [
+    { role: 'user', content: prompt },
+  ]);
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.error?.message || `HTTP ${response.status}`;
-    throw new Error(errorMessage);
-  }
+  const response = await fetchWithAdaptiveRetry(url, {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${config.apiKey}`,
+  }, body);
 
   const data = await response.json();
   const message = data.choices?.[0]?.message;
@@ -96,35 +88,22 @@ export async function streamLLM(
   let finishReason: string | null = null;
   let doneViaDone = false;
 
-  const isKimi = /kimi/i.test(config.model);
   const isReasoningModel = /kimi|deepseek|reasoning|thinking|r1/i.test(config.model);
-  const requestBody: Record<string, unknown> = {
-    model: config.model || 'gpt-4o',
-    messages: [{ role: 'user', content: prompt }],
-    stream: true,
-    // Reasoning models can burn 8000+ tokens on internal monologue before
-    // emitting content. Default limits (4096) are nowhere near enough.
-    max_completion_tokens: isReasoningModel ? 24000 : 8000,
-  };
-  if (isKimi) {
-    requestBody.thinking = { type: 'enabled' };
-  }
+  const requestBody = buildLlmBody(
+    config.model || 'gpt-4o',
+    [{ role: 'user', content: prompt }],
+    {
+      stream: true,
+      maxTokens: isReasoningModel ? 24000 : 8000,
+      enableThinking: /kimi/i.test(config.model),
+    }
+  );
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || `HTTP ${response.status}`;
-      throw new Error(errorMessage);
-    }
+    const response = await fetchWithAdaptiveRetry(url, {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    }, requestBody);
 
     if (!response.body) {
       throw new Error('No response body');
@@ -329,26 +308,18 @@ export async function testApiConnection(config: ApiConfig): Promise<{ success: b
       ? `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
       : 'https://api.openai.com/v1/chat/completions';
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model || 'gpt-4o',
-        messages: [{ role: 'user', content: 'Say "OK" and nothing else.' }],
-        max_completion_tokens: 5,
-      }),
-    });
+    const body = buildLlmBody(
+      config.model || 'gpt-4o',
+      [{ role: 'user', content: 'Say "OK" and nothing else.' }],
+      { maxTokens: 5 }
+    );
 
-    if (response.ok) {
-      return { success: true, message: 'Connection successful!' };
-    }
+    await fetchWithAdaptiveRetry(url, {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    }, body);
 
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.error?.message || `HTTP ${response.status}`;
-    return { success: false, message: `Connection failed: ${errorMessage}` };
+    return { success: true, message: 'Connection successful!' };
   } catch (err) {
     return { success: false, message: `Connection failed: ${err instanceof Error ? err.message : String(err)}` };
   }
