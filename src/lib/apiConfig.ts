@@ -300,7 +300,29 @@ export async function testBraveApiKey(key: string): Promise<{ success: boolean; 
   }
 }
 
-export async function testApiConnection(config: ApiConfig): Promise<{ success: boolean; message: string; requestBody?: Record<string, unknown> }> {
+function getBodyChanges(original: Record<string, unknown>, final: Record<string, unknown>): Array<{ key: string; from: unknown; to: unknown }> {
+  const changes: Array<{ key: string; from: unknown; to: unknown }> = [];
+  for (const key of Object.keys(original)) {
+    if (!(key in final)) {
+      changes.push({ key, from: original[key], to: '<removed>' });
+    } else if (JSON.stringify(original[key]) !== JSON.stringify(final[key])) {
+      changes.push({ key, from: original[key], to: final[key] });
+    }
+  }
+  for (const key of Object.keys(final)) {
+    if (!(key in original)) {
+      changes.push({ key, from: '<added>', to: final[key] });
+    }
+  }
+  return changes;
+}
+
+export async function testApiConnection(config: ApiConfig): Promise<{
+  success: boolean;
+  message: string;
+  requestBody?: Record<string, unknown>;
+  changes?: Array<{ key: string; from: unknown; to: unknown }>;
+}> {
   try {
     if (!config.apiKey.trim()) {
       return { success: false, message: 'API key is required' };
@@ -316,12 +338,19 @@ export async function testApiConnection(config: ApiConfig): Promise<{ success: b
       { maxTokens: 24000, enableThinking: true }
     );
 
-    await fetchWithAdaptiveRetry(url, {
+    const { finalBody } = await fetchWithAdaptiveRetry(url, {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
     }, body);
 
-    return { success: true, message: 'Connection successful!', requestBody: body };
+    const changes = getBodyChanges(body, finalBody);
+
+    return {
+      success: true,
+      message: 'Connection successful!',
+      requestBody: finalBody,
+      changes: changes.length > 0 ? changes : undefined,
+    };
   } catch (err) {
     return { success: false, message: `Connection failed: ${err instanceof Error ? err.message : String(err)}` };
   }

@@ -19,7 +19,12 @@ export default function ConfigureApiScreen() {
   const [showTtsKey, setShowTtsKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string; requestBody?: Record<string, unknown> } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+    requestBody?: Record<string, unknown>;
+    changes?: Array<{ key: string; from: unknown; to: unknown }>;
+  } | null>(null);
   const [isTestingBrave, setIsTestingBrave] = useState(false);
   const [braveTestResult, setBraveTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTestingTts, setIsTestingTts] = useState(false);
@@ -378,13 +383,37 @@ export default function ConfigureApiScreen() {
               <span className="text-sm">{testResult.message}</span>
             </div>
             {testResult.requestBody && (
-              <details className="bg-slate-900/50 border border-slate-700 rounded-lg">
+              <details className="bg-slate-900/50 border border-slate-700 rounded-lg" open>
                 <summary className="px-4 py-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-slate-300 select-none">
-                  Show request parameters
+                  Request parameters (what the model runs with)
                 </summary>
                 <pre className="px-4 pb-3 text-[11px] text-slate-400 whitespace-pre-wrap overflow-x-auto">
                   {JSON.stringify(testResult.requestBody, null, 2)}
                 </pre>
+              </details>
+            )}
+            {testResult.changes && testResult.changes.length > 0 && (
+              <details className="bg-amber-900/20 border border-amber-700/40 rounded-lg">
+                <summary className="px-4 py-2 text-xs font-medium text-amber-400 cursor-pointer hover:text-amber-300 select-none">
+                  Changes applied ({testResult.changes.length})
+                </summary>
+                <div className="px-4 pb-3 space-y-1">
+                  {testResult.changes.map((change) => (
+                    <div key={change.key} className="text-[11px] text-amber-400/80">
+                      <span className="font-mono text-amber-300">{change.key}</span>
+                      {' '}
+                      {change.to === '<removed>' ? (
+                        <span>removed (was {JSON.stringify(change.from)})</span>
+                      ) : change.from === '<added>' ? (
+                        <span>added: {JSON.stringify(change.to)}</span>
+                      ) : (
+                        <span>
+                          changed from {JSON.stringify(change.from)} → {JSON.stringify(change.to)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </details>
             )}
           </div>
