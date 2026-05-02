@@ -1,4 +1,5 @@
 import type { SessionConfig } from './sessionConfig';
+import type { SegmentId } from './fileManager';
 
 export type StageId =
   | 'agent1'
@@ -7,7 +8,8 @@ export type StageId =
   | 'segmentWriter'
   | 'segmentEditor'
   | 'assembler'
-  | 'agent6';
+  | 'agent6'
+  | 'topicLoop';
 
 export type StageStatus = 'pending' | 'running' | 'completed' | 'rejected' | 'error';
 
@@ -49,6 +51,36 @@ export type AgentFn = (
 
 export type PipelineStatus = 'idle' | 'running' | 'complete' | 'error';
 
+export type TopicState =
+  | 'pending'
+  | 'editing'
+  | 'approved'
+  | 'rejected'
+  | 'rewriting'
+  | 'stalled';
+
+export interface TopicStatus {
+  index: number;
+  segmentId: SegmentId;
+  state: TopicState;
+  attempt: number;
+  reasoning: string;
+  output: string;
+  prompt?: string;
+  metadata?: unknown;
+  lastError?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface TopicLoopState {
+  isActive: boolean;
+  topics: TopicStatus[];
+  approvedCount: number;
+  totalCount: number;
+  waveNumber: number;
+}
+
 export interface PipelineState {
   status: PipelineStatus;
   currentStageId: StageId | null;
@@ -60,6 +92,7 @@ export interface PipelineState {
   editorLoops: number;
   segmentLoopIndex: number;
   hasRunTopicLoop: boolean;
+  topicLoop?: TopicLoopState;
 }
 
 export interface PipelineCallbacks {
@@ -125,4 +158,5 @@ export const STAGE_DEFINITIONS: Omit<StageRecord, 'status' | 'iteration' | 'reas
   { id: 'segmentEditor', name: 'Segment Editor', shortName: 'Seg Edit', icon: 'FileCheck' },
   { id: 'assembler', name: 'Assembler', shortName: 'Assemble', icon: 'Layers' },
   { id: 'agent6', name: 'Audio Producer', shortName: 'Audio', icon: 'Headphones' },
+  { id: 'topicLoop', name: 'Topic Loop', shortName: 'Topics', icon: 'LayoutGrid' },
 ];

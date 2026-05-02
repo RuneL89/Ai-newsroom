@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
-import type { StageRecord, AuditResult, RuleResult } from '../../lib/pipelineTypes';
+import type { StageRecord, AuditResult, RuleResult, TopicLoopState, TopicStatus } from '../../lib/pipelineTypes';
 import { FileText, Zap, ScrollText, Clock, ExternalLink, FileCheck, ClipboardCheck } from 'lucide-react';
 
 interface Agent1Metadata {
@@ -22,11 +22,12 @@ interface Agent1Metadata {
 
 interface StageDetailProps {
   stage: StageRecord | null;
+  topicLoop?: TopicLoopState;
 }
 
 type TabId = 'articles' | 'stream' | 'output' | 'audit' | 'prompt';
 
-export default function StageDetail({ stage }: StageDetailProps) {
+export default function StageDetail({ stage, topicLoop }: StageDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>('stream');
 
   if (!stage) {
@@ -35,6 +36,11 @@ export default function StageDetail({ stage }: StageDetailProps) {
         Select a stage above to view details
       </div>
     );
+  }
+
+  // Special render for Topic Loop
+  if (stage.id === 'topicLoop' && topicLoop) {
+    return <TopicLoopDetail topicLoop={topicLoop} />;
   }
 
   const statusLabels = {
@@ -479,6 +485,187 @@ function AuditTab({ stage, audit }: { stage: StageRecord; audit: AuditResult | u
       {Array.isArray((stage.metadata as Record<string, unknown> | undefined)?.streamDiagnostics) && (
         <DiagnosticsSection diagnostics={(stage.metadata as Record<string, unknown>).streamDiagnostics as string[]} />
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Topic Loop Detail — expandable per-topic rows
+// ============================================================================
+
+function TopicLoopDetail({ topicLoop }: { topicLoop: TopicLoopState }) {
+  const [expandedTopic, setExpandedTopic] = useState<number | null>(null);
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-slate-700">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-white">Topic Loop</span>
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-900/50 text-blue-300">
+            {topicLoop.approvedCount}/{topicLoop.totalCount} approved
+          </span>
+          {topicLoop.waveNumber > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-900/50 text-amber-300">
+              Retry wave {topicLoop.waveNumber}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Topic rows */}
+      <div className="divide-y divide-slate-700/50">
+        {topicLoop.topics.map((topic) => (
+          <TopicDetailRow
+            key={topic.segmentId}
+            topic={topic}
+            isExpanded={expandedTopic === topic.index}
+            onToggle={() => setExpandedTopic(
+              expandedTopic === topic.index ? null : topic.index
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopicDetailRow({
+  topic,
+  isExpanded,
+  onToggle,
+}: {
+  topic: TopicStatus;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const stateColor =
+    topic.state === 'approved'
+      ? 'text-green-400'
+      : topic.state === 'editing' || topic.state === 'rewriting'
+        ? 'text-amber-400'
+        : topic.state === 'stalled'
+          ? 'text-red-400'
+          : 'text-slate-500';
+
+  const dotColor =
+    topic.state === 'approved'
+      ? 'bg-green-500'
+      : topic.state === 'editing' || topic.state === 'rewriting'
+        ? 'bg-amber-400'
+        : topic.state === 'stalled'
+          ? 'bg-red-500'
+          : 'bg-slate-600';
+
+  const stateLabel =
+    topic.state === 'approved'
+      ? 'Approved'
+      : topic.state === 'editing'
+        ? 'Editing'
+        : topic.state === 'rewriting'
+          ? `Rewriting (attempt ${topic.attempt})`
+          : topic.state === 'stalled'
+            ? 'Stalled'
+            : topic.state === 'rejected'
+              ? 'Rejected'
+              : 'Pending';
+
+  return (
+    <div className="bg-slate-900">
+      {/* Summary row */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-800/50 transition-colors"
+      >
+        <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', dotColor)} />
+        <span className="text-xs font-medium text-slate-200 w-16">{topic.segmentId}</span>
+        <span className={cn('text-xs', stateColor)}>{stateLabel}</span>
+        {topic.attempt > 0 && (
+          <span className="text-[10px] text-slate-500 ml-auto">Attempt {topic.attempt}</span>
+        )}
+        <span className="text-xs text-slate-500 ml-2">
+          {isExpanded ? '▲' : '▼'}
+        </span>
+      </button>
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <div className="px-4 pb-3 space-y-2">
+          {topic.lastError && (
+            <div className="text-[11px] text-red-400 bg-red-900/20 rounded px-2 py-1">
+              {topic.lastError}
+            </div>
+          )}
+          {topic.reasoning && (
+            <div>
+              <div className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Reasoning</div>
+              <pre className="text-[11px] text-slate-300 whitespace-pre-wrap bg-slate-800/50 rounded p-2 max-h-40 overflow-y-auto">
+                {topic.reasoning}
+              </pre>
+            </div>
+          )}
+          {topic.metadata != null && (
+            <div>
+              <div className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Audit</div>
+              <TopicAuditSection audit={topic.metadata as AuditResult} />
+            </div>
+          )}
+          {topic.prompt && (
+            <div>
+              <div className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Prompt</div>
+              <pre className="text-[11px] text-slate-400 whitespace-pre-wrap bg-slate-800/50 rounded p-2 max-h-40 overflow-y-auto">
+                {topic.prompt}
+              </pre>
+            </div>
+          )}
+          {topic.output && (
+            <div>
+              <div className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Output</div>
+              <pre className="text-[11px] text-slate-300 whitespace-pre-wrap bg-slate-800/50 rounded p-2 max-h-40 overflow-y-auto">
+                {topic.output}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TopicAuditSection({ audit }: { audit: AuditResult }) {
+  const failCount = audit.stories.reduce(
+    (sum, s) => sum + s.rules.filter((r) => r.status === 'FAIL').length,
+    0
+  );
+  const totalRules = audit.stories.reduce((sum, s) => sum + s.rules.length, 0);
+
+  return (
+    <div className="bg-slate-800/50 rounded border border-slate-700/50 px-3 py-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className={cn(
+          'text-[10px] px-1.5 py-0.5 rounded font-medium',
+          audit.approval_status === 'APPROVED'
+            ? 'bg-green-900/30 text-green-400'
+            : 'bg-red-900/30 text-red-400'
+        )}>
+          {audit.approval_status}
+        </span>
+        <span className="text-[10px] text-slate-500">
+          {failCount}/{totalRules} failed
+        </span>
+      </div>
+      {audit.has_feedback && audit.rewriter_instructions && (
+        <pre className="text-[11px] text-amber-200/80 whitespace-pre-wrap font-sans bg-slate-950/30 rounded p-2 border border-slate-700/50 max-h-32 overflow-auto">
+          {audit.rewriter_instructions}
+        </pre>
+      )}
+      <div className="space-y-1">
+        {audit.stories.map((story, idx) =>
+          story.rules.map((rule, rIdx) => (
+            <RuleRow key={`${idx}-${rIdx}`} rule={rule} />
+          ))
+        )}
+      </div>
     </div>
   );
 }

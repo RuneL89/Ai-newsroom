@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils';
-import type { StageRecord, PipelineStatus } from '../../lib/pipelineTypes';
+import type { StageRecord, PipelineStatus, TopicLoopState, TopicStatus } from '../../lib/pipelineTypes';
 import {
   Search,
   ClipboardCheck,
@@ -12,6 +12,7 @@ import {
   FileEdit,
   FileCheck,
   Layers,
+  LayoutGrid,
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -23,6 +24,7 @@ const iconMap: Record<string, React.ElementType> = {
   Layers,
   CheckCircle,
   Headphones,
+  LayoutGrid,
 };
 
 interface StageStripProps {
@@ -31,6 +33,7 @@ interface StageStripProps {
   selectedStageId: string | null;
   pipelineStatus: PipelineStatus;
   onSelectStage: (id: string) => void;
+  topicLoop?: TopicLoopState;
 }
 
 export default function StageStrip({
@@ -39,10 +42,23 @@ export default function StageStrip({
   selectedStageId,
   pipelineStatus,
   onSelectStage,
+  topicLoop,
 }: StageStripProps) {
   return (
     <div className="w-full space-y-1.5">
       {stages.map((stage) => {
+        // Special render for active topic loop
+        if (stage.id === 'topicLoop' && topicLoop?.isActive) {
+          return (
+            <TopicLoopCard
+              key={stage.id}
+              topicLoop={topicLoop}
+              isSelected={stage.id === selectedStageId}
+              onClick={() => onSelectStage(stage.id)}
+            />
+          );
+        }
+
         const Icon = iconMap[stage.icon] || Search;
         const isActive = stage.id === currentStageId && pipelineStatus === 'running';
         const isSelected = stage.id === selectedStageId;
@@ -119,5 +135,103 @@ export default function StageStrip({
         );
       })}
     </div>
+  );
+}
+
+// ============================================================================
+// Topic Loop Card — mini grid visualization
+// ============================================================================
+
+function TopicLoopCard({
+  topicLoop,
+  isSelected,
+  onClick,
+}: {
+  topicLoop: TopicLoopState;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const activeCount = topicLoop.topics.filter(
+    (t) => t.state === 'editing' || t.state === 'rewriting'
+  ).length;
+  const stalledCount = topicLoop.topics.filter((t) => t.state === 'stalled').length;
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'relative w-full flex flex-col gap-2 px-3 py-2.5 rounded-lg border transition-all text-left',
+        activeCount > 0 && 'border-blue-500 bg-blue-900/30 ring-1 ring-blue-500/30',
+        activeCount === 0 && stalledCount > 0 && 'border-amber-500/50 bg-amber-900/20',
+        activeCount === 0 && stalledCount === 0 && 'border-green-500/50 bg-green-900/20',
+        isSelected && activeCount === 0 && 'border-slate-500 bg-slate-800'
+      )}
+    >
+      {/* Header row */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-shrink-0">
+          {activeCount > 0 ? (
+            <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+          ) : stalledCount > 0 ? (
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+          ) : (
+            <CheckCircle className="w-5 h-5 text-green-400" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-medium text-blue-300">
+            Topic Loop
+          </div>
+          <div className="text-[10px] text-slate-500">
+            {activeCount > 0
+              ? `${activeCount} active, ${topicLoop.approvedCount}/${topicLoop.totalCount} approved`
+              : stalledCount > 0
+                ? `${stalledCount} stalled, retry wave ${topicLoop.waveNumber}`
+                : `${topicLoop.approvedCount}/${topicLoop.totalCount} approved`}
+          </div>
+        </div>
+
+        <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+          {topicLoop.approvedCount}/{topicLoop.totalCount}
+        </span>
+      </div>
+
+      {/* Mini dot grid */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {topicLoop.topics.map((topic) => (
+          <TopicDot key={topic.segmentId} topic={topic} />
+        ))}
+      </div>
+    </button>
+  );
+}
+
+function TopicDot({ topic }: { topic: TopicStatus }) {
+  const colorClass =
+    topic.state === 'approved'
+      ? 'bg-green-500'
+      : topic.state === 'editing' || topic.state === 'rewriting'
+        ? 'bg-amber-400 animate-pulse'
+        : topic.state === 'stalled'
+          ? 'bg-red-500'
+          : 'bg-slate-600';
+
+  const label =
+    topic.state === 'approved'
+      ? 'Approved'
+      : topic.state === 'editing'
+        ? 'Editing'
+        : topic.state === 'rewriting'
+          ? `Rewriting (attempt ${topic.attempt})`
+          : topic.state === 'stalled'
+            ? `Stalled: ${topic.lastError?.slice(0, 40) ?? 'error'}`
+            : 'Pending';
+
+  return (
+    <span
+      title={`${topic.segmentId}: ${label}`}
+      className={cn('w-2.5 h-2.5 rounded-full', colorClass)}
+    />
   );
 }

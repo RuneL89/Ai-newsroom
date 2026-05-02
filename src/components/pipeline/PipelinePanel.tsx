@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { cn } from '../../lib/utils';
 import { PipelineRunner } from '../../lib/pipeline';
 import { createAgentMap } from '../../agents';
-import type { PipelineState, StageId } from '../../lib/pipelineTypes';
+import type { PipelineState, StageId, StageRecord } from '../../lib/pipelineTypes';
 import type { SessionConfig } from '../../lib/sessionConfig';
 import StageStrip from './StageStrip';
 import StageDetail from './StageDetail';
@@ -128,7 +128,10 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     };
   }, [podcastUrl]);
 
-  const selectedStage = state.stages.find((s) => s.id === state.selectedStageId) || null;
+  const selectedStage = state.stages.find((s) => s.id === state.selectedStageId) ||
+    (state.selectedStageId === 'topicLoop'
+      ? { id: 'topicLoop', name: 'Topic Loop', icon: 'LayoutGrid', status: 'running', startTime: Date.now(), iteration: 1 } as unknown as StageRecord
+      : null);
 
   return (
     <div className="space-y-3">
@@ -227,11 +230,12 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
           selectedStageId={state.selectedStageId}
           pipelineStatus={state.status}
           onSelectStage={handleSelectStage}
+          topicLoop={state.topicLoop}
         />
       )}
 
       {/* Stage Detail */}
-      <StageDetail stage={selectedStage} />
+      <StageDetail stage={selectedStage} topicLoop={state.topicLoop} />
     </div>
   );
 }

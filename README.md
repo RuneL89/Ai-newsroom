@@ -30,7 +30,7 @@ Then you hit **Run Full Pipeline**. Seven AI agents go to work:
 | 2 | **Full Script Editor** | ✅ Real | Checks script-wide coherence, bias consistency, and structural completeness (all segments present). Binary pass/fail — no per-theme audit. Runs twice: once after Researcher, once after Assembler. |
 | 3 | **Full Script Writer** | ✅ Real | Receives script-wide feedback, fixes ONLY coherence/bias/structural issues. Explicitly preserves all topic segment content (which has already passed individual audit). Rewrites intro, outro, transitions, and bias framing only. |
 | 4 | **Segment Writer** | ✅ Real | Called ONLY when a topic fails Segment Editor audit. Rewrites one topic at a time. Reads target segment + adjacent segments for transition context. |
-| 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the sequential topic loop (starts first — topics already exist from Researcher). Evaluates only the 7 topic-level requirements. Reads the individual `topicN.txt` file, NOT `full_script.txt`. |
+| 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the **parallel topic loop**. All topics are edited simultaneously; each runs independently until it passes. Evaluates only the 7 topic-level requirements. Reads the individual `topicN.txt` file, NOT `full_script.txt`. |
 | 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes to Full Script Editor for second-pass coherence/bias verification. |
 | 7 | **Audio Producer** | ✅ Real | Reads all segment files, strips XML tags and music cues, generates narration via OpenAI TTS (`gpt-4o-mini-tts`) with voice-specific instructions, mixes music stings between segments using streamed MP3 encoding (`lamejs`), produces a single MP3 podcast file |
 
@@ -65,49 +65,51 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
 ┌───────────────┐                             ┌─────────────────────────┐
 │               │                             │  STEP 2a: FULL SCRIPT   │
 │  ╔════════════╧══════════════════════════╗  │  WRITER                 │
-│  ║  TOPIC LOOP (Steps 3–9a)              ║  │  Fix script-wide issues │
-│  ║                                       ║  │                         │
-│  ║  Step 3:  Segment Editor              ║  │  └─► back to Step 2     │
-│  ║           (Topic N)                   ║  └─────────────────────────┘
-│  ║           ├─ APPROVED ─► next topic   ║    
-│  ║           └─ REJECTED ─► Step 3a      ║   
-│  ║                                       ║           
+│  ║  PARALLEL TOPIC LOOP                 ║  │  Fix script-wide issues │
+│  ║  (Steps 3–3a, all topics at once)    ║  │                         │
+│  ║                                       ║  │  └─► back to Step 2     │
+│  ║  Step 3:  Segment Editor              ║  └─────────────────────────┘
+│  ║           (Topics 1–7 simultaneously) ║
+│  ║           ├─ APPROVED ─► done         ║
+│  ║           └─ REJECTED ─► Step 3a      ║
+│  ║                                       ║
 │  ║  Step 3a: Segment Writer              ║
-│  ║           (Topic N)                   ║ 
-│  ║           └─► back to Step 3          ║  
-│  ║                                       ║ 
-│  ║  Repeats for N = 1 → 7                ║
-│  ╚═════════════════╤═════════════════════╝ 
-│                    │                             
-│                    └─► after Topic 7 approved ──
+│  ║           (per-topic, eager retry)    ║
+│  ║           └─► back to Step 3          ║
+│  ║                                       ║
+│  ║  Round-based stall recovery:          ║
+│  ║  stalled topics retry together        ║
+│  ║  after each wave settles              ║
+│  ╚═════════════════╤═════════════════════╝
+│                    │
+│                    └─► after all topics approved
 │                                                ▼
-┌─────────────────┐           ┌─────────────────────────┐
-│  STEP 10        │           │  STEP 3a–9a: SEGMENT    │
-│  ASSEMBLER      │           │  WRITER (Topic N)       │
-│  (pure code)    │           │  Rewrite failing topic  │
-│  Concatenate    │           │  only, preserve rest    │
-│  all TopicN.txt │           │                         │
-└─────────────────┘           │  └─► back to Step 3     │
-        │                     └─────────────────────────┘
+┌─────────────────┐
+│  STEP 4         │
+│  ASSEMBLER      │
+│  (pure code)    │
+│  Concatenate    │
+│  all TopicN.txt │
+└─────────────────┘
         │
         ▼
 ┌──────────────────────────────────────────────┐
-│  STEP 11: FULL SCRIPT EDITOR  (Pass 2)       │
+│  STEP 5: FULL SCRIPT EDITOR  (Pass 2)        │
 │  Verify coherence & bias after rewrites      │
 └──────────────────────────────────────────────┘
                       │
         ┌─────────────┴───────────────────────┐
-        │      APPROVED             REJECTED  │      
+        │      APPROVED             REJECTED  │
         ▼                                     ▼
 ┌─────────────────┐       ┌─────────────────────────┐
-│  STEP 12        │       │  STEP 11a: FULL SCRIPT  │
+│  STEP 6         │       │  STEP 5a: FULL SCRIPT   │
 │  AUDIO PRODUCER │       │  WRITER                 │
 │  (agent6)       │       │  Fix script-wide issues │
 │  Strip XML →    │       │                         │
-│  Generate audio │       │  └─► back to Step 11    │
+│  Generate audio │       │  └─► back to Step 5     │
 └─────────────────┘       │                         │
         │                 └─────────────────────────┘
-        ▼                       
+        ▼
        ✅ COMPLETE               
 ```
 
@@ -122,12 +124,19 @@ Reads `full_script.txt` and performs a script-wide audit. Checks three things on
 **Step 2a — Full Script Writer (loop on Step 2)**
 Called only when Pass 1 rejects. Receives script-wide feedback and fixes ONLY coherence, bias, and structural issues. Explicitly preserves all topic segment content (those have not yet been individually audited). Rewrites intro, outro, transition bridges, and bias framing. Loops back to Step 2 for re-audit.
 
-**Step 3 — Segment Editor (Topic N)**
-Reads the individual `TopicN.txt` file (NOT `full_script.txt`).
+**Step 3 — Parallel Topic Loop (Segment Editor + Segment Writer)**
+After Full Script Editor Pass 1 approves, **all topics launch simultaneously** as independent workers. Each topic runs its own edit → (if rejected) → write → re-edit loop until it passes. The UI shows a live mini-grid of colored dots — one per topic — updating in real time.
 
-1. **Mechanical validation** (pure code, microseconds): checks length (≥2000 chars) and sentence structure (avg >15, ≥60% in 15-30 range) automatically. Results shown in the UI with exact counts.
-2. **Qualitative audit** (LLM, 5 rules): DEPTH, ACCESSIBILITY, FORWARD_CLOSE, SOURCE_ATTRIBUTION, GEOGRAPHY.
-3. **Combined result**: mechanical PASS + qualitative PASS → APPROVED → next topic. Any failure → REJECTED → Step 3a.
+**Per-topic flow:**
+
+1. **Segment Editor** reads the individual `TopicN.txt` file (NOT `full_script.txt`)
+   - **Mechanical validation** (pure code, microseconds): checks length (≥2000 chars) and sentence structure (avg >15, ≥60% in 15-30 range). Results shown in the UI with exact counts.
+   - **Qualitative audit** (LLM, 5 rules): DEPTH, ACCESSIBILITY, FORWARD_CLOSE, SOURCE_ATTRIBUTION, GEOGRAPHY.
+   - **Combined result**: mechanical PASS + qualitative PASS → APPROVED. Any failure → REJECTED → Step 3a.
+
+2. **Segment Writer** (called only when rejected) receives combined feedback, rewrites the topic addressing all issues, then loops back to Segment Editor for re-audit.
+
+**Stall recovery:** If an API call throws a retryable error (429 rate limit, timeout, network), that topic marks itself `stalled` and exits. After all active workers settle, a **retry wave** launches all stalled topics together. This repeats until every topic is approved or hits the max-attempts limit (5).
 
 **Step 3a — Segment Writer (Topic N)**
 Called only when the Segment Editor rejects a topic. Receives **combined feedback** (mechanical data + qualitative analysis).
@@ -137,19 +146,16 @@ Called only when the Segment Editor rejects a topic. Receives **combined feedbac
 3. Writes the final `TopicN.txt` back to disk and reassembles `full_script.txt`.
 4. Loops back to Step 3 for the same topic.
 
-**Steps 4–9 / 4a–9a — Repeat Steps 3–3a for Topics 2–7**
-The sequential topic loop advances one topic at a time. Each topic is audited first; only failing topics trigger a writer. The loop continues until all 7 topics pass.
-
-**Step 10 — Assembler**
+**Step 4 — Assembler**
 Pure code stage — no LLM call. Reads all individual `TopicN.txt` files, concatenates them in order (intro → topic1–7 → outro), and writes the final `full_script.txt`.
 
-**Step 11 — Full Script Editor (Pass 2)**
+**Step 5 — Full Script Editor (Pass 2)**
 Reads the assembled `full_script.txt` after all topic rewrites. Performs the same 3 script-wide checks as Pass 1. Verifies that the per-topic rewrites did not break coherence or bias consistency.
 
-**Step 11a — Full Script Writer (loop on Step 11)**
-Called only when Pass 2 rejects. Same constraints as Step 2a — fixes script-wide issues only, preserves all topic content. Loops back to Step 11 for re-audit. After Pass 2 approves, the pipeline proceeds directly to Audio Producer — the topic loop does NOT re-run.
+**Step 5a — Full Script Writer (loop on Step 5)**
+Called only when Pass 2 rejects. Same constraints as Step 2a — fixes script-wide issues only, preserves all topic content. Loops back to Step 5 for re-audit. After Pass 2 approves, the pipeline proceeds directly to Audio Producer — the topic loop does NOT re-run.
 
-**Step 12 — Audio Producer**
+**Step 6 — Audio Producer**
 Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.). Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Fetches music sting files (intro, story, block, outro) and renders each segment through the Web Audio API — music sting → 0.5s gap → narration — ensuring music and narration never overlap. Encodes to MP3 incrementally using `lamejs` and appends each segment to disk, keeping peak memory under ~26 MB regardless of podcast length. The finished file is named dynamically (e.g. `United States Daily Report - 2026-04-27.mp3`) and auto-exported to `Documents/Newsroom` when possible. A **Play Podcast** button appears in the UI when complete. Pipeline complete.
 
 ### Rejection Loops
@@ -159,23 +165,24 @@ Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), s
 - If ANY issue is found, it rejects and the Full Script Writer receives the entire script + `rewriter_instructions`, rewrites everything top-to-bottom, parses XML segments, and writes all files back.
 - The draft goes **back to Full Script Editor (Pass 1)** for re-evaluation.
 
-**Sequential Topic Loop (Segment Editor → Segment Writer):**
-- After Full Script Editor (Pass 1) approves, the pipeline enters a sequential per-topic loop: topic 1 → topic 2 → ... → topic 7.
-- For each topic, the **Segment Editor runs first** — it reads the individual `topicN.txt` file (NOT `full_script.txt`) and audits it against the 7 topic-level rules.
-- If the topic **passes**, the loop advances to the **next topic** — no writer is called.
-- If the topic **fails**, the Segment Writer is called. It reads the target segment + adjacent segments for transition context, rewrites only that segment, and writes it back.
-- The Segment Editor then **re-audits the same topic**. If it passes, the loop advances. If it still fails, the loop stays on the same topic.
+**Parallel Topic Loop (Segment Editor → Segment Writer):**
+- After Full Script Editor (Pass 1) approves, **all topics launch simultaneously** as independent workers.
+- Each topic runs: **Segment Editor → (if rejected) → Segment Writer → re-audit**. This eager loop repeats until the topic passes.
+- If an API call throws a retryable error (429, timeout, network), the topic marks itself `stalled` and exits. After all active workers settle, a **retry wave** launches all stalled topics together.
+- Topics never block each other. Fast topics finish immediately; slow topics get retries without holding up the pipeline.
 
 **Full Script Editor → Full Script Writer loop (Pass 2):**
 - After all topics pass and the Assembler concatenates segments, the Full Script Editor runs a **second pass** to verify that the per-topic rewrites did not break script-wide coherence or bias.
-- If rejected, the Full Script Writer fixes the script-wide issues while explicitly preserving all topic segment content. The Full Script Editor re-audits. If approved, the **entire topic loop re-runs from topic 1** (Option A — full re-loop for safety).
+- If rejected, the Full Script Writer fixes the script-wide issues while explicitly preserving all topic segment content. The Full Script Editor re-audits.
+- **The topic loop does NOT re-run** — individual topics have already passed audit. Only script-wide framing is adjusted.
 - If approved, the pipeline proceeds to the Audio Producer.
 
 All loops are **unbounded** — the pipeline prioritizes correctness over speed.
 
 **Key behaviors:**
 - **Rejection loops have no limit** — the pipeline prioritizes correctness over speed
-- **API failures retry 3 times** — then abort with a clear error
+- **Per-topic attempts capped at 5** — after 5 edit/write cycles, the topic aborts to prevent runaway API costs
+- **API failures retry 3 times per call** — then mark topic as stalled for round-based recovery
 - **Session context is ephemeral** — configuration exists only in memory for the current run; close the app and it disappears
 - **Segment files persist** — Every segment is written to app-private storage (`Directory.Data/newsroom/`) via `@capacitor/filesystem`. Even if the app closes mid-run, the files remain for inspection.
 - **Test mode** — A "Skip Editor Loop" toggle in Configure API bypasses all editors and writers, routing Agent 1 → Agent 6 directly. Fast for testing the TTS/audio pipeline without burning API credits on editorial loops.
@@ -197,7 +204,7 @@ Rejection:
 - `approval_status`: `"REJECTED"`, `has_feedback`: `true`
 - `rewriter_instructions`: Specific, actionable fixes for script-wide issues
 
-**Segment Editor** (topic-level audit — runs once per topic in sequential loop):
+**Segment Editor** (topic-level audit — runs once per topic in the parallel topic loop):
 
 First, a **pure-code mechanical validator** runs automatically (microseconds, zero LLM cost):
 - **Length**: ≥2000 characters
@@ -279,6 +286,7 @@ The pipeline UI is designed for phones:
 
 - **Vertical stage strip** — A scrollable column of compact stage cards on the left. Each shows an icon, short name, and status dot. Active stages pulse. Completed stages show green checks. Rejected stages show amber warnings.
 - **Tap to inspect** — Tap any stage to expand its reasoning chain, the **full LLM prompt**, the **first draft** (for the Researcher), the **structured audit** (for Editors), and output below
+- **Topic Loop mini-grid** — During the parallel topic loop, a live dot grid shows every topic's status at a glance (green = approved, amber = active, red = stalled). Tap to expand per-topic details with reasoning, audit, and output
 - **Loop counters** — Badges show when a stage has run multiple times (×2, ×3...)
 - **Real-time streaming** — Reasoning tokens stream in as agents think, just like watching a live terminal
 - **StageDetail tabs** — Articles (Agent 1 only), Stream (live reasoning), Agent Output (parsed first draft), Audit (Editor gates — per-theme PASS/FAIL), Prompt (full LLM prompt)
@@ -297,6 +305,7 @@ The pipeline UI is designed for phones:
 | Storage | `@capacitor/preferences` (settings), `@capacitor/filesystem` (segment files in app-private `Directory.Data/newsroom/`) |
 | News Search | Brave Search API (web search with `freshness` filtering) |
 | LLM API | OpenAI-compatible `/chat/completions` (SSE streaming) |
+| LLM Adapter | Model-independent adaptive retry (`src/lib/llmAdapter.ts`) — auto-fixes unsupported parameters |
 | CI/CD | GitHub Actions |
 
 ### Self-Contained APK
@@ -314,6 +323,20 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 
 **News Search:**
 - Brave Search API — Web search with freshness filtering (day/week/month). Free tier: 2,000 queries/month.
+
+---
+
+## Model-Independent LLM Adapter
+
+The pipeline uses a model-independent LLM adapter (`src/lib/llmAdapter.ts`) that makes AI Newsroom work with **any** OpenAI-compatible endpoint — regardless of what parameters the model supports.
+
+**How it works:**
+1. `buildLlmBody()` constructs a safe request body with standard parameters (`max_tokens`, `temperature`, `top_p`, etc.)
+2. `fetchWithAdaptiveRetry()` sends the request and watches for `Unsupported parameter` errors
+3. On error, it **automatically fixes the body** — renaming `max_tokens` ↔ `max_completion_tokens`, stripping `temperature`, `top_p`, `thinking`, `frequency_penalty`, `presence_penalty`, `reasoning_effort`
+4. Retries up to 2 times with the corrected body
+
+This means you can plug in Kimi, DeepSeek, Claude via OpenRouter, local Ollama models, or any custom endpoint without changing a single line of agent code. The adapter learns the provider's constraints from error messages and adapts on the fly.
 
 ---
 
@@ -368,12 +391,11 @@ Everything bundles into the APK. No external web server. No cloud backend. The a
 │   │   └── voices.ts
 │   ├── lib/                  # Core logic
 │   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, Brave key storage
-│   │   ├── newsSearch.ts     # Brave Search API wrapper with fallback chain
-│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, Brave key storage
 │   │   ├── fileManager.ts    # File I/O via @capacitor/filesystem (segment files, full_script.txt)
+│   │   ├── llmAdapter.ts     # Model-independent LLM request builder with error-driven adaptive retry
 │   │   ├── newsSearch.ts     # Brave Search API wrapper with fallback chain
-│   │   ├── pipeline.ts       # Pipeline runner state machine with FULL_SCRIPT / SEGMENTS routing
-│   │   ├── pipelineTypes.ts  # Pipeline type definitions (AuditResult with rewrite_scope, failed_segments)
+│   │   ├── pipeline.ts       # Pipeline runner state machine with parallel topic loop + stall recovery
+│   │   ├── pipelineTypes.ts  # Pipeline type definitions (AuditResult, TopicLoopState, etc.)
 │   │   ├── scriptParser.ts   # XML segment parser, assembler, tag stripper for TTS
 │   │   ├── sessionConfig.ts  # SessionConfig builder & formatter
 │   │   └── utils.ts

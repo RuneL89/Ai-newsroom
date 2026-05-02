@@ -1,18 +1,30 @@
 import type {
   AgentMap,
   AgentContext,
+  AgentOutput,
+  AgentFn,
   PipelineState,
   PipelineCallbacks,
   StageId,
   StageRecord,
   StageStatus,
+  TopicState,
+  TopicStatus,
+  AuditResult,
 } from './pipelineTypes';
 import { STAGE_DEFINITIONS } from './pipelineTypes';
 import type { SessionConfig } from './sessionConfig';
+import type { SegmentId } from './fileManager';
 import { PipelineService } from './pipelineService';
 import { PipelineNotifications } from './pipelineNotifications';
 
 const MAX_RETRIES = 3;
+const MAX_TOPIC_ATTEMPTS = 5;
+
+const INDEX_TO_SEGMENT: SegmentId[] = [
+  'topic1', 'topic2', 'topic3',
+  'topic4', 'topic5', 'topic6', 'topic7',
+];
 
 function createInitialStages(): StageRecord[] {
   return STAGE_DEFINITIONS.map((def) => ({
@@ -118,7 +130,7 @@ export class PipelineRunner {
         console.log(`[Pipeline] Draft preview: ${preview}`);
 
         // Determine next stage
-        const next = this.getNextStage(stage, result.metadata);
+        const next = await this.getNextStage(stage, result.metadata, draft);
 
         if (next === 'COMPLETE' || next === null) {
           this.updateState({
@@ -159,7 +171,10 @@ export class PipelineRunner {
     currentDraft: string,
     feedback: unknown
   ) {
-    const agent = this.agents[stageId];
+    const agent = ((this.agents as unknown) as Record<string, AgentFn>)[stageId];
+    if (!agent) {
+      throw new Error(`No agent found for stage: ${stageId}`);
+    }
 
     // Increment iteration
     const existingStage = this.state.stages.find((s) => s.id === stageId)!;
@@ -191,7 +206,7 @@ export class PipelineRunner {
 
         const result = await agent(
           ctx,
-          (chunk) => {
+          (chunk: string) => {
             if (this.abortController?.signal.aborted) {
               throw new Error('Pipeline aborted by user');
             }
@@ -200,7 +215,7 @@ export class PipelineRunner {
               reasoning: reasoningChunks.join(''),
             });
           },
-          (partial) => {
+          (partial: Partial<StageRecord>) => {
             if (this.abortController?.signal.aborted) {
               throw new Error('Pipeline aborted by user');
             }
@@ -259,12 +274,16 @@ export class PipelineRunner {
     return 'completed';
   }
 
-  private getNextStage(current: StageId, metadata: unknown): StageId | 'COMPLETE' {
+  private async getNextStage(
+    current: StageId,
+    metadata: unknown,
+    draft: string
+  ): Promise<StageId | 'COMPLETE'> {
     if (!metadata || typeof metadata !== 'object') {
       // Fallback: linear flow
       const flow: StageId[] = [
         'agent1', 'fullScriptEditor', 'fullScriptWriter',
-        'segmentWriter', 'segmentEditor', 'assembler', 'agent6',
+        'assembler', 'agent6',
       ];
       const idx = flow.indexOf(current);
       if (idx === -1 || idx === flow.length - 1) return 'COMPLETE';
@@ -272,7 +291,6 @@ export class PipelineRunner {
     }
 
     const m = metadata as Record<string, unknown>;
-    const totalTopics = this.sessionConfig?.editorial.includeSegment ? 7 : 6;
 
     switch (current) {
       case 'agent1': {
@@ -289,12 +307,12 @@ export class PipelineRunner {
           });
           return 'fullScriptWriter';
         }
-        // APPROVED: first pass (segmentLoopIndex === -1) → start topic loop
-        // APPROVED: second pass (segmentLoopIndex !== -1) → done
+        // APPROVED: first pass → run parallel topic loop, then assembler
+        // APPROVED: second pass → done
         if (!this.state.hasRunTopicLoop) {
-          // Pass 1: start topic loop
-          this.updateState({ segmentLoopIndex: 0 });
-          return 'segmentEditor';
+          await this.runParallelTopicLoop(this.sessionConfig!, draft);
+          this.updateState({ hasRunTopicLoop: true });
+          return 'assembler';
         }
         // Pass 2: done
         return 'agent6';
@@ -303,29 +321,8 @@ export class PipelineRunner {
       case 'fullScriptWriter':
         return 'fullScriptEditor';
 
-      case 'segmentWriter':
-        return 'segmentEditor';
-
-      case 'segmentEditor': {
-        if (m.approval_status === 'REJECTED') {
-          this.updateState({
-            editorLoops: this.state.editorLoops + 1,
-          });
-          return 'segmentWriter';
-        }
-        // APPROVED: advance to next topic or finish loop
-        const maxIndex = totalTopics - 1;
-        if (this.state.segmentLoopIndex < maxIndex) {
-          this.updateState({
-            segmentLoopIndex: this.state.segmentLoopIndex + 1,
-          });
-          return 'segmentEditor';
-        }
-        return 'assembler';
-      }
-
       case 'assembler': {
-        // Reset segment loop and flag for second fullScriptEditor pass
+        // Flag for second fullScriptEditor pass
         this.updateState({ segmentLoopIndex: -1, hasRunTopicLoop: true });
         return 'fullScriptEditor';
       }
@@ -336,5 +333,251 @@ export class PipelineRunner {
       default:
         return 'COMPLETE';
     }
+  }
+
+  // ========================================================================
+  // PARALLEL TOPIC LOOP
+  // ========================================================================
+
+  private async runParallelTopicLoop(
+    sessionConfig: SessionConfig,
+    currentDraft: string
+  ): Promise<void> {
+    const totalTopics = sessionConfig.editorial.includeSegment ? 7 : 6;
+    const topics: TopicStatus[] = Array.from({ length: totalTopics }, (_, i) => ({
+      index: i,
+      segmentId: INDEX_TO_SEGMENT[i],
+      state: 'pending' as TopicState,
+      attempt: 0,
+      reasoning: '',
+      output: '',
+    }));
+
+    this.updateStage('topicLoop', {
+      status: 'running',
+      iteration: 1,
+      reasoning: '',
+      output: '',
+      startedAt: new Date().toISOString(),
+    });
+    this.updateState({
+      currentStageId: 'topicLoop',
+      topicLoop: {
+        isActive: true,
+        topics,
+        approvedCount: 0,
+        totalCount: totalTopics,
+        waveNumber: 0,
+      },
+    });
+
+    // Phase 1: Eager launch all topics
+    const workers = topics.map((t) => this.runTopicWorker(t.index, sessionConfig, currentDraft));
+    await Promise.allSettled(workers);
+
+    // Phase 2: Round-based retry for stalled topics
+    let wave = 0;
+    while (this.hasStalledTopics()) {
+      wave++;
+      this.updateTopicLoopWave(wave);
+      const stalled = this.getStalledTopicIndices();
+      this.clearStalledTopics();
+      const retries = stalled.map((i) => this.runTopicWorker(i, sessionConfig, currentDraft));
+      await Promise.allSettled(retries);
+    }
+
+    // Mark complete
+    this.updateStage('topicLoop', {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+    });
+    this.updateState({ topicLoop: { ...this.state.topicLoop!, isActive: false } });
+  }
+
+  private async runTopicWorker(
+    topicIndex: number,
+    sessionConfig: SessionConfig,
+    currentDraft: string
+  ): Promise<void> {
+    while (true) {
+      if (this.abortController?.signal.aborted) {
+        throw new Error('Pipeline aborted by user');
+      }
+
+      const topic = this.state.topicLoop!.topics[topicIndex];
+      if (topic.attempt >= MAX_TOPIC_ATTEMPTS) {
+        throw new Error(`Topic ${topic.segmentId} exceeded max attempts (${MAX_TOPIC_ATTEMPTS})`);
+      }
+
+      // --- EDITOR ---
+      this.updateTopicStatus(topicIndex, {
+        state: 'editing',
+        startedAt: new Date().toISOString(),
+      });
+
+      try {
+        const editorResult = await this.executeTopicAgent(
+          'segmentEditor',
+          topicIndex,
+          sessionConfig,
+          currentDraft
+        );
+
+        const audit = editorResult.metadata as AuditResult | undefined;
+
+        if (audit?.approval_status === 'APPROVED') {
+          this.updateTopicStatus(topicIndex, {
+            state: 'approved',
+            output: editorResult.draft,
+            metadata: audit,
+            completedAt: new Date().toISOString(),
+          });
+          return; // Done!
+        }
+
+        // REJECTED — eager writer
+        this.updateTopicStatus(topicIndex, {
+          state: 'rejected',
+          output: editorResult.draft,
+          metadata: audit,
+        });
+      } catch (err) {
+        if (this.isRetryableError(err)) {
+          this.updateTopicStatus(topicIndex, {
+            state: 'stalled',
+            lastError: err instanceof Error ? err.message : String(err),
+          });
+          return; // Exit worker, round-based retry will pick it up
+        }
+        throw err; // Fatal error
+      }
+
+      // --- WRITER ---
+      this.updateTopicStatus(topicIndex, {
+        state: 'rewriting',
+        attempt: topic.attempt + 1,
+        startedAt: new Date().toISOString(),
+      });
+
+      try {
+        const feedback = this.state.topicLoop!.topics[topicIndex].metadata;
+        const writerResult = await this.executeTopicAgent(
+          'segmentWriter',
+          topicIndex,
+          sessionConfig,
+          currentDraft,
+          feedback
+        );
+
+        this.updateTopicStatus(topicIndex, {
+          output: writerResult.draft,
+          metadata: writerResult.metadata,
+        });
+        // Loop back immediately for re-audit (eager)
+      } catch (err) {
+        if (this.isRetryableError(err)) {
+          this.updateTopicStatus(topicIndex, {
+            state: 'stalled',
+            lastError: err instanceof Error ? err.message : String(err),
+          });
+          return;
+        }
+        throw err;
+      }
+    }
+  }
+
+  private async executeTopicAgent(
+    stageId: 'segmentEditor' | 'segmentWriter',
+    topicIndex: number,
+    sessionConfig: SessionConfig,
+    currentDraft: string,
+    feedback?: unknown
+  ): Promise<AgentOutput> {
+    const agent = this.agents[stageId];
+    const topic = this.state.topicLoop!.topics[topicIndex];
+
+    const ctx: AgentContext = {
+      sessionConfig,
+      currentDraft,
+      iteration: topic.attempt + 1,
+      segmentLoopIndex: topicIndex,
+      feedback,
+    };
+
+    let retries = 0;
+    while (true) {
+      try {
+        const reasoningChunks: string[] = [];
+        const result = await agent(
+          ctx,
+          (chunk) => {
+            if (this.abortController?.signal.aborted) {
+              throw new Error('Pipeline aborted by user');
+            }
+            reasoningChunks.push(chunk);
+            this.updateTopicStatus(topicIndex, { reasoning: reasoningChunks.join('') });
+          },
+          (partial) => {
+            if (this.abortController?.signal.aborted) {
+              throw new Error('Pipeline aborted by user');
+            }
+            this.updateTopicStatus(topicIndex, {
+              prompt: partial.prompt,
+              output: partial.output ?? topic.output,
+            });
+          }
+        );
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === 'Pipeline aborted by user') throw err;
+        retries++;
+        if (retries >= MAX_RETRIES) throw err;
+        await new Promise((r) => setTimeout(r, 1000 * retries));
+      }
+    }
+  }
+
+  // ========================================================================
+  // HELPERS
+  // ========================================================================
+
+  private isRetryableError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /429|rate.limit|timeout|network|econnreset|etimedout/i.test(msg);
+  }
+
+  private hasStalledTopics(): boolean {
+    return this.state.topicLoop!.topics.some((t) => t.state === 'stalled');
+  }
+
+  private getStalledTopicIndices(): number[] {
+    return this.state.topicLoop!.topics
+      .map((t, i) => (t.state === 'stalled' ? i : -1))
+      .filter((i) => i !== -1);
+  }
+
+  private clearStalledTopics(): void {
+    const topics = this.state.topicLoop!.topics.map((t) =>
+      t.state === 'stalled' ? { ...t, state: 'pending' as TopicState } : t
+    );
+    this.updateState({ topicLoop: { ...this.state.topicLoop!, topics } });
+  }
+
+  private updateTopicStatus(index: number, partial: Partial<TopicStatus>): void {
+    const tl = this.state.topicLoop!;
+    const topics = [...tl.topics];
+    topics[index] = { ...topics[index], ...partial };
+    const approvedCount = topics.filter((t) => t.state === 'approved').length;
+    this.updateState({
+      topicLoop: { ...tl, topics, approvedCount },
+    });
+  }
+
+  private updateTopicLoopWave(wave: number): void {
+    this.updateState({
+      topicLoop: { ...this.state.topicLoop!, waveNumber: wave },
+    });
   }
 }
