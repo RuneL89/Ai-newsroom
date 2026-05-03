@@ -2,47 +2,47 @@
 
 **Your personal AI news producer. In your pocket.**
 
-Pick any country on Earth. Select three news topics, how you want them told, and who you want telling it. Then watch a team of six AI agents research local sources, synthesize themes, edit them, fact-check every claim, and polish the final script — all in real time, right on your phone.
+Pick any country on Earth. Choose three news topics, a voice, a music style, and an editorial angle. Then watch a team of AI agents research local sources, write, edit, fact-check, and produce a professional news podcast — all automatically, right on your phone.
 
-No newsroom. No subscription. No backend. Just you, your API keys, and a fully autonomous pipeline that turns raw global events into a professional news podcast tailored exactly to your perspective.
+No newsroom. No subscription. No backend. Just you, your API keys, and a fully autonomous pipeline that turns raw global events into a polished audio broadcast tailored exactly to your perspective.
 
 ---
 
 ## What It Does
 
-Imagine waking up in Berlin and wanting to know what's happening in Nairobi — but not from a Western lens, and not from sanitized headlines. You want the local perspective, translated and contextualized for an international audience, delivered by a voice you chose, with the editorial angle you prefer.
+Imagine waking up in Berlin and wanting to know what's happening in Nairobi — but not from a Western lens, and not from sanitized headlines. You want the local perspective, translated and contextualized, delivered by a voice you chose, with the editorial angle you prefer.
 
 **AI Newsroom makes that happen in under 5 minutes.**
 
 You configure:
-- **Country** — 195 countries with local language and native news sources
+- **Country** — Any of 195 countries with local language and native news sources
 - **Timeframe** — Daily briefing, weekly review, or monthly roundup
 - **Topics** — Exactly 3 from politics, economy, sport, technology, crime, and more
-- **Voice** — Four OpenAI TTS voices (Marcus/Onyx, Dexter/Fable, Chloe/Nova, Sarah/Coral) with distinct personalities and preview audio
+- **Voice** — Four distinct AI voices with personalities and preview audio
 - **Music** — Custom intro, outro, stings, and transitions
 - **Editorial Perspective** — From extreme left to extreme right, or dead-center moderate
 
-Then you hit **Run Full Pipeline**. Seven AI agents go to work:
+Then you hit **Run Full Pipeline**. The agents go to work.
 
-| # | Agent | Status | What It Does |
+---
+
+## The Agents
+
+The pipeline is built around seven specialized agents. Each has a single job, and they pass work to each other like a real newsroom:
+
+| # | Agent | What It Does | Why It Matters |
 |---|---|---|---|
-| 1 | **Researcher** | ✅ Real | Queries Brave Search for local + continent news across your 3 topics, writes the first draft as XML segments (`intro.txt`, `Topic1-6.txt`, `outro.txt`) with music cues and editorial framing |
-| 2 | **Full Script Editor** | ✅ Real | Checks script-wide coherence, bias consistency, and structural completeness (all segments present). Binary pass/fail — no per-theme audit. Runs twice: once after Researcher, once after Assembler. |
-| 3 | **Full Script Writer** | ✅ Real | Receives script-wide feedback, fixes ONLY coherence/bias/structural issues. Explicitly preserves all topic segment content (which has already passed individual audit). Rewrites intro, outro, transitions, and bias framing only. |
-| 4 | **Segment Writer** | ✅ Real | Called ONLY when a topic fails Segment Editor audit. Rewrites one topic at a time. Reads target segment + adjacent segments for transition context. |
-| 5 | **Segment Editor** | ✅ Real | Audits one topic at a time in the **parallel topic loop**. All topics are edited simultaneously; each runs independently until it passes. Evaluates only the 7 topic-level requirements. Reads the individual `topicN.txt` file, NOT `full_script.txt`. |
-| 6 | **Assembler** | ✅ Real | Pure code stage — concatenates all segment files into `full_script.txt`. Routes to Full Script Editor for second-pass coherence/bias verification. |
-| 7 | **Audio Producer** | ✅ Real | Reads all segment files, strips XML tags and music cues, generates narration via OpenAI TTS (`gpt-4o-mini-tts`) with voice-specific instructions, mixes music stings between segments using streamed MP3 encoding (`lamejs`), produces a single MP3 podcast file |
-
-Each agent streams its reasoning in real time. You can tap any stage to see exactly what it's thinking, the **full prompt** that was sent to the LLM, the **first draft** (for the Researcher), and the **structured audit** (for Editors). If an editor rejects a theme, you see the specific rule that failed and why — the writer gets that feedback, fixes it, and resubmits. The pipeline loops until everything passes.
-
-**This is not a chatbot. This is a production pipeline.**
+| 1 | **Researcher** | Searches the web for local and continental news across your 3 topics, then writes the first draft as XML-tagged segments | This is where the raw information comes from. Without the Researcher, nothing else can happen. It prioritizes local-language sources and country-specific news outlets |
+| 2 | **Full Script Editor** | Checks the entire script for structural completeness, cross-topic coherence, and consistent bias framing | Catches problems the Researcher can't see — like a topic that contradicts another, or a bias that drifts halfway through. Acts as the executive editor |
+| 3 | **Full Script Writer** | Rewrites the full script based on the Editor's feedback, preserving all topic content while fixing framing and transitions | The fixer for script-wide problems. Never touches individual topics that have already passed their own audits |
+| 4 | **Segment Editor** | Audits one topic at a time — checking length, sentence structure, depth, accessibility, sourcing, and geography | The line editor. Runs mechanical checks (pure code, instant) plus qualitative rules (LLM). Every topic must pass before moving on |
+| 5 | **Segment Writer** | Rewrites a single topic when the Segment Editor rejects it, using adjacent segments for transition context | The specialist. Focuses on one topic at a time, fixing exactly what the editor flagged without breaking what already works |
+| 6 | **Assembler** | Pure code — reads all segment files and concatenates them into the final `full_script.txt` | The production assistant. No AI involved. Just reliable, repeatable assembly |
+| 7 | **Audio Producer** | Strips XML tags, generates narration via OpenAI TTS, mixes music stings between segments, and produces a single MP3 file | The sound engineer. Handles voice synthesis, audio mixing, gap timing, and incremental MP3 encoding to keep memory usage low |
 
 ---
 
 ## The Pipeline
-
-The AI Newsroom pipeline is a state machine that orchestrates seven specialized agents. It runs fully automatically, handles rejection loops without limits, retries failed API calls up to 3 times before aborting, and writes every segment to individual files via `@capacitor/filesystem`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -113,63 +113,120 @@ The AI Newsroom pipeline is a state machine that orchestrates seven specialized 
        ✅ COMPLETE               
 ```
 
-### Step-by-Step Breakdown
+---
 
-**Step 1 — Researcher**
-Queries Brave Search for local and continent news across your 3 selected topics. Streams results to the LLM and writes the first draft as XML-tagged segments: `intro.txt`, `Topic1.txt` through `Topic7.txt`, and `outro.txt`. Also writes the assembled `full_script.txt`.
+## Pipeline in Detail
 
-**Step 2 — Full Script Editor (Pass 1)**
-Reads `full_script.txt` and performs a script-wide audit. Checks three things only: (1) all segments are present and XML tags are intact, (2) cross-theme coherence (transitions, progression, cross-references, tone), and (3) bias consistency across the entire script. Returns a binary pass/fail — no per-topic breakdown.
+### Step 1 — Researcher
 
-**Step 2a — Full Script Writer (loop on Step 2)**
-Called only when Pass 1 rejects. Receives script-wide feedback and fixes ONLY coherence, bias, and structural issues. Explicitly preserves all topic segment content (those have not yet been individually audited). Rewrites intro, outro, transition bridges, and bias framing. Loops back to Step 2 for re-audit.
+The Researcher is the entry point. It takes your session configuration (country, topics, timeframe, voice, bias, music) and does two things:
 
-**Step 3 — Parallel Topic Loop (Segment Editor + Segment Writer)**
-After Full Script Editor Pass 1 approves, **all topics launch simultaneously** as independent workers. Each topic runs its own edit → (if rejected) → write → re-edit loop until it passes. The UI shows a live mini-grid of colored dots — one per topic — updating in real time.
+1. **Search**: For each of your 3 topics, it queries Brave Search twice — once for local news in the chosen country, once for continental news across the continent. Search terms are automatically translated into the country's primary language. The freshness filter adjusts based on your timeframe (`day`, `week`, or `month`). Up to 10 articles per query are collected.
+
+2. **Write**: All search results are streamed to the LLM with a detailed prompt that includes the session context, completeness requirements, and editorial bias instructions. The LLM writes the first draft as XML-tagged segments: `<segment id="intro">`, `<segment id="topic1">` through `<segment id="topic7">`, and `<segment id="outro">`.
+
+   - Topics 1–3 are local (each of your 3 topics, scoped to the chosen country)
+   - Topics 4–6 are continental (same 3 topics, scoped to the continent)
+   - Topic 7 is an optional editorial segment (if enabled in config)
+
+The Researcher also writes `full_script.txt` — the concatenation of all segments — so the Full Script Editor has a complete document to audit.
+
+Every segment file is written to app-private storage via `@capacitor/filesystem` in `Directory.Data/newsroom/`. This means even if the app crashes mid-run, the files persist and can be inspected.
+
+### Step 2 — Full Script Editor (Pass 1)
+
+This is the first gate. The Editor reads `full_script.txt` and performs a **script-wide audit** with three checks only:
+
+1. **Structural completeness**: All segments present (intro, topic1–7, outro), XML tags intact
+2. **Cross-topic coherence**: Transitions between topics, logical progression, cross-references, tone consistency
+3. **Bias consistency**: Headlines, topic order, language, source selection, and framing all align with the chosen editorial perspective
+
+The Editor returns a binary `APPROVED` / `REJECTED` decision. If rejected, it produces `rewriter_instructions` — specific, actionable fixes. The Full Script Writer then receives these instructions and rewrites the script.
+
+**Important**: The Full Script Writer only fixes script-wide issues. It explicitly preserves all topic segment content because those segments have not yet been individually audited. It rewrites intro, outro, transition bridges, and bias framing only.
+
+After the Writer finishes, the draft goes **back to the Full Script Editor (Pass 1)** for re-audit. This loop repeats until the script passes.
+
+### Step 3 — Parallel Topic Loop
+
+After Pass 1 approves, **all topics launch simultaneously** as independent workers. Each topic runs its own edit → (if rejected) → write → re-edit loop until it passes.
+
+The UI shows a live mini-grid of colored dots — one per topic — updating in real time.
 
 **Per-topic flow:**
 
-1. **Segment Editor** reads the individual `TopicN.txt` file (NOT `full_script.txt`)
-   - **Mechanical validation** (pure code, microseconds): checks length (≥2000 chars) and sentence structure (avg >15, ≥60% in 15-30 range). Results shown in the UI with exact counts.
-   - **Qualitative audit** (LLM, 5 rules): DEPTH, ACCESSIBILITY, FORWARD_CLOSE, SOURCE_ATTRIBUTION, GEOGRAPHY.
-   - **Combined result**: mechanical PASS + qualitative PASS → APPROVED. Any failure → REJECTED → Step 3a.
+1. **Segment Editor** reads the individual `TopicN.txt` file (not `full_script.txt`)
 
-2. **Segment Writer** (called only when rejected) receives combined feedback, rewrites the topic addressing all issues, then loops back to Segment Editor for re-audit.
+   **Mechanical validation** (pure code, microseconds, zero LLM cost):
+   - **Length**: ≥2000 characters
+   - **Sentence structure**: ≥60% of sentences are 15–30 words; average >15 words
+   
+   Results are shown in the UI with exact counts.
+
+   **Qualitative audit** (LLM, 5 rules):
+   - **DEPTH**: ≥3 distinct developments, events, or angles
+   - **ACCESSIBILITY**: Zero-knowledge listener can follow without Googling. Every term, acronym, organization defined on first mention
+   - **FORWARD_CLOSE**: Ends with "what to watch" or "what happens next"
+   - **SOURCE_ATTRIBUTION**: Specific sources cited by name in the text
+   - **GEOGRAPHY**: Local topics = only chosen-country stories; Continental topics = only continent-country stories
+
+   **Combined result**: mechanical PASS + ALL 5 qualitative rules PASS → APPROVED. Any failure → REJECTED → Step 3a.
+
+2. **Segment Writer** (called only when rejected) receives **combined feedback** (mechanical data + qualitative analysis), rewrites the topic addressing all issues, then loops back to Segment Editor for re-audit.
 
 **Stall recovery:** If an API call throws a retryable error (429 rate limit, timeout, network), that topic marks itself `stalled` and exits. After all active workers settle, a **retry wave** launches all stalled topics together. This repeats until every topic is approved or hits the max-attempts limit (5).
 
-**Step 3a — Segment Writer (Topic N)**
-Called only when the Segment Editor rejects a topic. Receives **combined feedback** (mechanical data + qualitative analysis).
+**Topic labels:**
+- Topic 1: `{topic0}, {country}`
+- Topic 2: `{topic1}, {country}`
+- Topic 3: `{topic2}, {country}`
+- Topic 4: `{topic0}, {continent}`
+- Topic 5: `{topic1}, {continent}`
+- Topic 6: `{topic2}, {continent}`
+- Topic 7: `Editorial` (optional)
 
-1. LLM rewrites the topic addressing ALL issues.
-2. **Internal mechanical loop**: after LLM output, pure code validates length and sentence structure. If mechanical check fails, the writer builds a corrective prompt with exact failure data and calls the LLM again (max 3 retries).
-3. Writes the final `TopicN.txt` back to disk and reassembles `full_script.txt`.
-4. Loops back to Step 3 for the same topic.
+### Step 4 — Assembler
 
-**Step 4 — Assembler**
 Pure code stage — no LLM call. Reads all individual `TopicN.txt` files, concatenates them in order (intro → topic1–7 → outro), and writes the final `full_script.txt`.
 
-**Step 5 — Full Script Editor (Pass 2)**
+The Assembler also detects missing segments and warns if any segment file is empty.
+
+### Step 5 — Full Script Editor (Pass 2)
+
 Reads the assembled `full_script.txt` after all topic rewrites. Performs the same 3 script-wide checks as Pass 1. Verifies that the per-topic rewrites did not break coherence or bias consistency.
 
-**Step 5a — Full Script Writer (loop on Step 5)**
-Called only when Pass 2 rejects. Same constraints as Step 2a — fixes script-wide issues only, preserves all topic content. Loops back to Step 5 for re-audit. After Pass 2 approves, the pipeline proceeds directly to Audio Producer — the topic loop does NOT re-run.
+If rejected, the Full Script Writer fixes the script-wide issues while explicitly preserving all topic content. The Full Script Editor re-audits.
 
-**Step 6 — Audio Producer**
-Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.). Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Fetches music sting files (intro, story, block, outro) and renders each segment through the Web Audio API — music sting → 0.5s gap → narration — ensuring music and narration never overlap. Encodes to MP3 incrementally using `lamejs` and appends each segment to disk, keeping peak memory under ~26 MB regardless of podcast length. The finished file is named dynamically (e.g. `United States Daily Report - 2026-04-27.mp3`) and auto-exported to `Documents/Newsroom` when possible. A **Play Podcast** button appears in the UI when complete. Pipeline complete.
+**The topic loop does NOT re-run** — individual topics have already passed audit. Only script-wide framing is adjusted.
+
+If approved, the pipeline proceeds to the Audio Producer.
+
+### Step 6 — Audio Producer
+
+Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.).
+
+**Text-to-Speech**: Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Long segments are automatically chunked at ~3000 characters to stay within TTS limits.
+
+**Music mixing**: Fetches music sting files (intro, story, block, outro) from `./audio/` and renders each segment through the Web Audio API — music sting → 0.5s gap → narration — ensuring music and narration never overlap.
+
+**MP3 encoding**: Encodes to MP3 incrementally using `lamejs` and appends each segment to disk, keeping peak memory under ~26 MB regardless of podcast length.
+
+The finished file is named dynamically (e.g. `United States Daily Report - 2026-04-27.mp3`) and written to app-private storage. A **Play Podcast** button appears in the UI when complete.
 
 ### Rejection Loops
 
 **Full Script Editor → Full Script Writer loop (Pass 1):**
-- Full Script Editor (Pass 1) checks script-wide coherence, bias consistency, and structural completeness (all segments present, XML tags intact).
+- Full Script Editor (Pass 1) checks script-wide coherence, bias consistency, and structural completeness.
 - If ANY issue is found, it rejects and the Full Script Writer receives the entire script + `rewriter_instructions`, rewrites everything top-to-bottom, parses XML segments, and writes all files back.
 - The draft goes **back to Full Script Editor (Pass 1)** for re-evaluation.
+- **No limit** on iterations — correctness is prioritized over speed.
 
 **Parallel Topic Loop (Segment Editor → Segment Writer):**
 - After Full Script Editor (Pass 1) approves, **all topics launch simultaneously** as independent workers.
 - Each topic runs: **Segment Editor → (if rejected) → Segment Writer → re-audit**. This eager loop repeats until the topic passes.
 - If an API call throws a retryable error (429, timeout, network), the topic marks itself `stalled` and exits. After all active workers settle, a **retry wave** launches all stalled topics together.
 - Topics never block each other. Fast topics finish immediately; slow topics get retries without holding up the pipeline.
+- **Per-topic attempts capped at 5** — after 5 edit/write cycles, the topic aborts to prevent runaway API costs.
 
 **Full Script Editor → Full Script Writer loop (Pass 2):**
 - After all topics pass and the Assembler concatenates segments, the Full Script Editor runs a **second pass** to verify that the per-topic rewrites did not break script-wide coherence or bias.
@@ -177,166 +234,229 @@ Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), s
 - **The topic loop does NOT re-run** — individual topics have already passed audit. Only script-wide framing is adjusted.
 - If approved, the pipeline proceeds to the Audio Producer.
 
-All loops are **unbounded** — the pipeline prioritizes correctness over speed.
-
 **Key behaviors:**
 - **Rejection loops have no limit** — the pipeline prioritizes correctness over speed
 - **Per-topic attempts capped at 5** — after 5 edit/write cycles, the topic aborts to prevent runaway API costs
 - **API failures retry 3 times per call** — then mark topic as stalled for round-based recovery
 - **Session context is ephemeral** — configuration exists only in memory for the current run; close the app and it disappears
-- **Segment files persist** — Every segment is written to app-private storage (`Directory.Data/newsroom/`) via `@capacitor/filesystem`. Even if the app closes mid-run, the files remain for inspection.
+- **Segment files persist** — Every segment is written to app-private storage. Even if the app closes mid-run, the files remain for inspection.
 - **Test mode** — A "Skip Editor Loop" toggle in Configure API bypasses all editors and writers, routing Agent 1 → Agent 6 directly. Fast for testing the TTS/audio pipeline without burning API credits on editorial loops.
 
-### Editor Approval Rules
+---
 
-**Full Script Editor** (script-wide audit — runs twice):
+## Technical Architecture
 
-Checks:
-- **Structural completeness**: All segments present (intro, topic1–7, outro), XML tags intact
-- **Coherence**: Transitions between themes, logical progression, cross-references, tone consistency
-- **Bias consistency**: Headlines, theme order, language, source selection, framing all align with chosen perspective
+### Frontend
 
-Approval:
-- `approval_status`: `"APPROVED"`, `has_feedback`: `false`
-- `rewriter_instructions`: `"All requirements passed. No changes needed."`
-
-Rejection:
-- `approval_status`: `"REJECTED"`, `has_feedback`: `true`
-- `rewriter_instructions`: Specific, actionable fixes for script-wide issues
-
-**Segment Editor** (topic-level audit — runs once per topic in the parallel topic loop):
-
-First, a **pure-code mechanical validator** runs automatically (microseconds, zero LLM cost):
-- **Length**: ≥2000 characters
-- **Sentence structure**: ≥60% of sentences are 15–30 words; average >15 words
-
-Then the **LLM evaluates 5 qualitative rules only**:
-
-| # | Rule | PASS Standard |
+| Layer | Technology | Purpose |
 |---|---|---|
-| 1 | **Depth** | ≥3 distinct developments, events, or angles |
-| 2 | **Accessibility** | Zero-knowledge listener can follow without Googling. Every term, acronym, organization defined on first mention |
-| 3 | **Forward close** | Ends with "what to watch" or "what happens next" |
-| 4 | **Source attribution** | Specific sources cited by name in the text |
-| 5 | **Geography** | Local themes = only chosen-country stories; Continent themes = only continent-country stories |
+| Framework | React 18 + TypeScript | UI components, state management, event handling |
+| Styling | Tailwind CSS | Utility-first styling for rapid, consistent UI development |
+| Maps | Leaflet + react-leaflet | Interactive country selection map with continent bounding boxes |
+| Build | Vite | Fast dev server and optimized production builds |
+| Notifications | `@capacitor/local-notifications` | Background pipeline progress notifications on mobile |
 
-Approval:
-- Mechanical PASS + ALL 5 qualitative rules PASS
-- `approval_status`: `"APPROVED"`, `has_feedback`: `false`, `rewrite_scope`: `""`
+### Mobile
 
-Rejection:
-- Mechanical FAIL or ANY qualitative rule fails → `rewrite_scope`: `"SEGMENTS"`, `failed_segments`: `[current story ID]`
-- `approval_status`: `"REJECTED"`, `has_feedback`: `true`
-- `rewriter_instructions`: Combined mechanical data (exact counts) + qualitative feedback
+| Layer | Technology | Purpose |
+|---|---|---|
+| Runtime | Capacitor (Android) | Wraps the web app as a native Android APK with full hardware access |
+| Storage | `@capacitor/filesystem` | App-private file I/O for segment files, full scripts, and podcast MP3s |
+| Settings | `@capacitor/preferences` | Persistent key-value storage for API keys and app settings |
 
-### Agent Contracts
+### Pipeline Runtime
 
-Every agent implements the same interface:
+The pipeline is orchestrated by `PipelineRunner` (`src/lib/pipeline.ts`), a state machine class that manages stage execution, retry logic, and the parallel topic loop.
+
+**State machine:**
+- Stages are defined in `STAGE_DEFINITIONS` (`src/lib/pipelineTypes.ts`)
+- Each stage has: `id`, `name`, `description`, `icon`, `status`, `iteration`, `reasoning`, `output`, `prompt`, `metadata`
+- The runner maintains `PipelineState` with the current stage, selected stage, stage records, draft content, and topic loop state
+
+**Stage execution (`executeStage`):**
+1. Look up the agent function from the `AgentMap`
+2. Increment iteration counter
+3. Set status to `running`
+4. Build `AgentContext` with session config, current draft, iteration, segment loop index, and feedback
+5. Call the agent with two callbacks:
+   - `onReasoningChunk`: Appends to the stage's reasoning stream (displayed in real-time UI)
+   - `onUpdate`: Partial updates to the stage record (prompt, output, metadata)
+6. Agent returns `AgentOutput` with `draft`, `reasoning`, `prompt`, and `metadata`
+7. Infer status from metadata (e.g., `approval_status === 'REJECTED'` → `rejected`)
+8. Update stage record with final status, output, prompt, metadata, and completion time
+9. **Retry logic**: If the agent throws, retry up to 3 times with exponential backoff (1s, 2s, 3s). User abort is not retried.
+
+**Stage routing (`getNextStage`):**
+- `agent1` → `fullScriptEditor` (or `agent6` in test mode)
+- `fullScriptEditor` (rejected) → `fullScriptWriter` → back to `fullScriptEditor`
+- `fullScriptEditor` (approved, first pass) → triggers parallel topic loop → `assembler`
+- `fullScriptEditor` (approved, second pass) → `agent6`
+- `assembler` → `fullScriptEditor` (second pass)
+- `agent6` → `COMPLETE`
+
+**Parallel topic loop (`runParallelTopicLoop`):**
+1. Creates `TopicStatus` array with 6 or 7 topics (7 if editorial segment enabled)
+2. **Phase 1 — Eager launch**: Creates a worker Promise for each topic via `runTopicWorker`, then `Promise.allSettled`
+3. **Phase 2 — Round-based retry**: While stalled topics exist, increment wave number, reset stalled topics to `pending`, and relaunch workers
+4. Each `runTopicWorker` runs an infinite loop:
+   - Check max attempts (5)
+   - Run `segmentEditor` → if approved, return. If rejected, run `segmentWriter` → loop back
+   - Retryable errors (429, timeout, network) mark topic as `stalled` and exit worker
+5. Topic updates are batched via a 50ms debounce timer to prevent UI thrashing
+
+### Agents
+
+All agents implement the `AgentFn` interface:
 
 ```typescript
-interface AgentOutput {
-  draft: string;       // The current script (or unchanged for gates)
-  reasoning: string;   // Full reasoning text
-  metadata?: unknown;  // JSON for gates (audit results, fact-check reports, etc.)
-}
+type AgentFn = (
+  ctx: AgentContext,
+  onReasoningChunk: (chunk: string) => void,
+  onUpdate?: (partial: Partial<StageRecord>) => void
+) => Promise<AgentOutput>;
 ```
 
-Gates (Editor and Fact Checker) return structured JSON:
-- **Editor** → `AuditResult` with per-theme/per-rule PASS/FAIL status, `rejection_reason` for every failure, and `has_feedback` flag. If `has_feedback` is false, the Writer stage is skipped entirely.
-- **Fact Checker** → `FactCheckResult` with per-theme grades and `overall_status: PASS | ISSUES_FOUND`
-- **Fixer** → `RecoveryResult` with `writer_instructions` for the Writer to apply
+**Agent 1 — Researcher (`src/agents/agent1.ts`)**
+- Queries Brave Search for local + continental articles per topic
+- Builds prompt via `buildAgent1Prompt` (`src/prompts/agent1.ts`)
+- Streams LLM response via `streamLLM`
+- Parses XML segments via `parseFullScript` (`src/lib/scriptParser.ts`)
+- Writes segments to disk via `writeSegment` / `writeFullScript`
+- Metadata includes: article counts, topic groups, sources used, fallback flags, stream diagnostics
 
-### Permanent Requirements
+**Agent 2 — Full Script Editor (`src/agents/fullScriptEditor.ts`)**
+- Reads `full_script.txt` from disk
+- Builds prompt via `buildFullScriptEditorPrompt`
+- Streams LLM response
+- Parses structured audit via `parseFullScriptEditorOutput`
+- Returns `AuditResult` with `approval_status`, `has_feedback`, `rewriter_instructions`
+- Does NOT modify the draft — passes it through unchanged
 
-Theme completeness rules and editor audit checklists live in `src/prompts/shared/completenessRequirements.ts` as session-independent constants. They include:
+**Agent 3 — Full Script Writer (`src/agents/fullScriptWriter.ts`)**
+- Extracts `rewriter_instructions` from editor feedback
+- Builds prompt via `buildFullScriptWriterPrompt`
+- Streams LLM response
+- Parses XML segments, clears old segments, writes new ones
+- Reassembles `full_script.txt`
 
-- Minimum **2000 characters per theme summary**
-- At least **3 distinct developments, events, or angles** per theme
-- **60%+ of sentences between 15–30 words**
+**Agent 4 — Segment Editor (`src/agents/segmentEditor.ts`)**
+- Reads target segment from disk via `readSegment`
+- Runs mechanical validation via `validateMechanical` (`src/lib/mechanicalValidator.ts`)
+- Builds prompt with mechanical results included
+- Streams LLM for qualitative audit
+- Combines mechanical + qualitative into overall APPROVED/REJECTED
+- Returns combined result with `rewrite_scope: 'SEGMENTS'` and `failed_segments`
+
+**Agent 5 — Segment Writer (`src/agents/segmentWriter.ts`)**
+- Reads all segments for context
+- Builds context map with target segment + adjacent segments (for transition awareness)
+- LLM rewrite loop with internal mechanical validation:
+  - After each LLM output, runs `validateMechanical`
+  - If mechanical fails, builds corrective prompt with exact failure data
+  - Retries up to 3 times for mechanical corrections
+- Writes final segment back to disk
+- Reassembles `full_script.txt`
+
+**Agent 6 — Audio Producer (`src/agents/audioProducer.ts`)**
+- Loads all segments from disk
+- Loads TTS API key
+- Calls `producePodcast` (`src/lib/audioAssembler.ts`) which:
+  - Strips XML tags and music cues
+  - Chunks text for TTS (~3000 chars per chunk)
+  - Calls OpenAI TTS API (`gpt-4o-mini-tts`) per chunk
+  - Decodes MP3s via Web Audio API
+  - Fetches music stings and decodes them
+  - Mixes: music sting → 0.5s silence → narration
+  - Encodes to MP3 via `lamejs` incrementally
+  - Appends each segment to disk via `appendAudioChunk`
+- Returns podcast file name, duration, segment count
+
+### LLM Adapter
+
+`src/lib/llmAdapter.ts` provides model-independent LLM communication.
+
+**`buildLlmBody(model, messages, options)`** constructs the request body:
+- Sends `max_completion_tokens` by default (OpenAI newer standard)
+- Sends `thinking: {type: 'enabled'}` for Anthropic models
+- Sends `reasoning_effort: 'medium'` for OpenAI reasoning models (gpt-5*, o*)
+- Thinking parameter is model-family-aware based on model name detection
+
+**`fetchWithAdaptiveRetry(url, headers, body, maxRetries=2)`** sends the request and handles errors:
+- On 4xx error, extracts error message and attempts to fix the body
+- Fixes include: renaming `max_tokens` ↔ `max_completion_tokens`, stripping unsupported parameters (`temperature`, `top_p`, `thinking`, `reasoning_effort`, `frequency_penalty`, `presence_penalty`)
+- Also catches "too large" token errors, parses the model's limit from the error message, and caps the value automatically
+- Retries up to 2 times with corrected body
+- Non-4xx errors (5xx, network) are thrown immediately
+
+**`streamLLM(config, prompt, callbacks)`** handles SSE streaming:
+- Sends POST to `/chat/completions` with `stream: true`
+- Parses SSE chunks, extracting `delta.content` and `delta.reasoning_content`
+- Calls `onReasoningChunk` for reasoning tokens, `onContentChunk` for content tokens
+- Handles stream errors and completion
+
+### News Search
+
+`src/lib/newsSearch.ts` wraps the Brave Search API.
+
+**`searchTopicLocal(params)`**: Searches for `"{topic} {countryName}"` with country-specific result filtering.
+**`searchTopicContinent(params)`**: Searches for `"{topic} {continentName}"` without country filtering.
+
+Both use freshness filtering (`day`/`week`/`month`) and return up to 10 articles with title, description, source, URL, and published date.
+
+A fallback chain handles errors:
+1. Primary search with translated topic term
+2. Fallback to English topic term
+3. Fallback to generic "news {country}"
+
+### File Management
+
+`src/lib/fileManager.ts` provides app-private file I/O via `@capacitor/filesystem`.
+
+**Segments**: `intro.txt`, `Topic1.txt`–`Topic7.txt`, `outro.txt` — stored in `Directory.Data/newsroom/`
+**Full script**: `full_script.txt` — same directory
+**Podcast**: `{Country} {Timeframe} Report - {YYYY-MM-DD}.mp3` — same directory
+
+All writes use `recursive: true` to ensure directory creation. Reads return empty string on failure (non-fatal for reads).
+
+### Mechanical Validator
+
+`src/lib/mechanicalValidator.ts` runs pure-code validation on segment content:
+
+- **Length check**: `content.length >= 2000`
+- **Sentence structure**: Splits on `.!?`, counts words per sentence, checks:
+  - Average words per sentence > 15
+  - ≥60% of sentences are 15–30 words
+
+Returns `MechanicalResult` with pass/fail flags and exact counts. Used by both Segment Editor (audit) and Segment Writer (internal correction loop).
+
+### Session Configuration
+
+`src/lib/sessionConfig.ts` builds the `SessionConfig` object that is passed to every agent. It contains:
+
+- **Meta**: generation timestamp, version
+- **Dates**: today, earliest date (based on timeframe), days back, timeframe label
+- **Geography**: country (name, code, language, news sources), continent (name, code, news sources with languages)
+- **Content**: topics (3), voice (id, label, gender, accent), music suite (intro, outro, story sting, block sting)
+- **Editorial**: bias position (extreme-left to extreme-right), include editorial segment flag
+
+This config is computed once at pipeline start and never changes during the run. All agents read from it.
+
+### Prompt Architecture
+
+Prompts are built in `src/prompts/` as TypeScript functions that assemble strings from session config and requirements. There is no runtime template engine — just string concatenation.
+
+**`src/prompts/shared/completenessRequirements.ts`** contains the golden rules:
+- Minimum 2000 characters per topic summary
+- At least 3 distinct developments, events, or angles per topic
+- 60%+ of sentences between 15–30 words
 - All local terms defined on first mention
-- Zero-knowledge assumption (write for listeners with no prior context)
+- Zero-knowledge assumption
 - Continent-specific angles for continental news
-- **Cross-theme coherence** — transitions, logical progression, and explicit cross-references between themes
-- **Source attribution** — cite specific sources by name within the theme text
-- **Forward-looking close** — every theme ends with "what to watch"
+- Cross-topic coherence
+- Source attribution by name
+- Forward-looking close
 
-These are the golden rules. They don't change per session.
-
----
-
-## Topic-Based News Summaries
-
-Unlike traditional newscasts that report individual stories one by one, AI Newsroom produces **thematic summaries**. For each of your 3 selected topics, you get:
-
-- **A local theme** — synthesizing 3+ developments in your chosen country
-- **A continental theme** — synthesizing 3+ developments across the continent
-
-Each theme is ~2,000 characters and weaves together multiple sources into a coherent narrative. This approach:
-- **Works with web search snippets** — no full-article API required
-- **Surfaces trends and context** — not just isolated events
-- **Produces better podcasts** — thematic segments flow naturally, with explicit transitions
-
-The Researcher is explicitly instructed to **prioritize the country's listed news sources** (from `src/data/countries.ts`) and to **prefer local-language sources** for local themes. When multiple articles cover the same development, the source from the priority list wins.
-
----
-
-## Mobile-First UI
-
-The pipeline UI is designed for phones:
-
-- **Vertical stage strip** — A scrollable column of compact stage cards on the left. Each shows an icon, short name, and status dot. Active stages pulse. Completed stages show green checks. Rejected stages show amber warnings.
-- **Tap to inspect** — Tap any stage to expand its reasoning chain, the **full LLM prompt**, the **first draft** (for the Researcher), the **structured audit** (for Editors), and output below
-- **Topic Loop mini-grid** — During the parallel topic loop, a live dot grid shows every topic's status at a glance (green = approved, amber = active, red = stalled). Tap to expand per-topic details with reasoning, audit, and output
-- **Loop counters** — Badges show when a stage has run multiple times (×2, ×3...)
-- **Real-time streaming** — Reasoning tokens stream in as agents think, just like watching a live terminal
-- **StageDetail tabs** — Articles (Agent 1 only), Stream (live reasoning), Agent Output (parsed first draft), Audit (Editor gates — per-theme PASS/FAIL), Prompt (full LLM prompt)
-
----
-
-## Technical Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React 18 + TypeScript |
-| Styling | Tailwind CSS |
-| Maps | Leaflet |
-| Build | Vite |
-| Mobile | Capacitor (Android APK) |
-| Storage | `@capacitor/preferences` (settings), `@capacitor/filesystem` (segment files in app-private `Directory.Data/newsroom/`) |
-| News Search | Brave Search API (web search with `freshness` filtering) |
-| LLM API | OpenAI-compatible `/chat/completions` (SSE streaming) |
-| LLM Adapter | Model-independent adaptive retry (`src/lib/llmAdapter.ts`) — auto-fixes unsupported parameters |
-| CI/CD | GitHub Actions |
-
-### Self-Contained APK
-
-Everything bundles into the APK. No external web server. No cloud backend. The app talks directly to your chosen LLM provider and Brave Search using your API keys.
-
-### Supported Providers
-
-**LLM Providers:**
-- OpenAI (GPT-4o, etc.)
-- Anthropic (Claude via OpenRouter or direct)
-- Google Gemini
-- OpenRouter (unified access to many models)
-- Local/Custom endpoints (Ollama, llama.cpp, vLLM, etc.)
-
-**News Search:**
-- Brave Search API — Web search with freshness filtering (day/week/month). Free tier: 2,000 queries/month.
-
----
-
-## Model-Independent LLM Adapter
-
-The pipeline uses a model-independent LLM adapter (`src/lib/llmAdapter.ts`) that makes AI Newsroom work with **any** OpenAI-compatible endpoint — regardless of what parameters the model supports.
-
-**How it works:**
-1. `buildLlmBody()` constructs a safe request body with standard parameters (`max_tokens`, `temperature`, `top_p`, etc.)
-2. `fetchWithAdaptiveRetry()` sends the request and watches for `Unsupported parameter` errors
-3. On error, it **automatically fixes the body** — renaming `max_tokens` ↔ `max_completion_tokens`, stripping `temperature`, `top_p`, `thinking`, `frequency_penalty`, `presence_penalty`, `reasoning_effort`
-4. Retries up to 2 times with the corrected body
-
-This means you can plug in Kimi, DeepSeek, Claude via OpenRouter, local Ollama models, or any custom endpoint without changing a single line of agent code. The adapter learns the provider's constraints from error messages and adapts on the fly.
+Each agent prompt imports these requirements and embeds them verbatim. This ensures all agents work from the same rulebook.
 
 ---
 
@@ -351,6 +471,10 @@ This means you can plug in Kimi, DeepSeek, Claude via OpenRouter, local Ollama m
 │   │   │   ├── fable.wav
 │   │   │   ├── nova.wav
 │   │   │   └── coral.wav
+│   │   ├── intro_*.mp3         # Intro music stings
+│   │   ├── outro_*.mp3         # Outro music stings
+│   │   ├── story_*.mp3         # Story transition stings
+│   │   └── block_*.mp3         # Block transition stings
 │   ├── index.html            # Static HTML fallback
 │   └── logo.png              # Application logo
 ├── android/                  # Capacitor Android project
@@ -359,66 +483,73 @@ This means you can plug in Kimi, DeepSeek, Claude via OpenRouter, local Ollama m
 │   └── ...
 ├── src/
 │   ├── agents/               # Agent implementations
-│   │   ├── agent1.ts              # News Researcher — real Brave Search + LLM, writes XML segments to files
-│   │   ├── agent1Parse.ts         # Output parser for Agent 1 (6 theme sections)
-│   │   ├── fullScriptWriter.ts    # Full Script Writer — rewrites entire script, writes all segments
-│   │   ├── fullScriptEditor.ts    # Full Script Editor — audits full script, decides FULL_SCRIPT vs SEGMENTS routing
-│   │   ├── fullScriptEditorParse.ts  # JSON parser for audit results (rewrite_scope, failed_segments)
-│   │   ├── segmentWriter.ts       # Segment Writer — targeted rewrite of failing segments only
-│   │   ├── segmentEditor.ts       # Segment Editor — audits rewritten segments + transitions
-│   │   ├── assembler.ts           # Assembler — pure code concatenation of segments into full_script.txt
-│   │   ├── audioProducer.ts       # Real Audio Producer — OpenAI TTS + Web Audio concatenation
+│   │   ├── agent1.ts              # News Researcher — Brave Search + LLM, writes XML segments
+│   │   ├── agent1Parse.ts         # Output parser for Agent 1
+│   │   ├── fullScriptWriter.ts    # Full Script Writer — script-wide rewrites
+│   │   ├── fullScriptEditor.ts    # Full Script Editor — script-wide audit gate
+│   │   ├── fullScriptEditorParse.ts  # JSON parser for audit results
+│   │   ├── segmentWriter.ts       # Segment Writer — per-topic targeted rewrites
+│   │   ├── segmentEditor.ts       # Segment Editor — per-topic audit gate
+│   │   ├── assembler.ts           # Assembler — pure code concatenation
+│   │   ├── audioProducer.ts       # Audio Producer — TTS + audio mixing
+│   │   ├── stubs/                 # Stub agents for testing
+│   │   │   ├── agent3Stub.ts
 │   │   │   └── agent6Stub.ts
 │   │   └── index.ts               # Agent map factory
 │   ├── components/           # React UI components
 │   │   ├── pipeline/         # Pipeline UI components
-│   │   │   ├── PipelinePanel.tsx
-│   │   │   ├── StageDetail.tsx
-│   │   │   └── StageStrip.tsx
+│   │   │   ├── PipelinePanel.tsx    # Main pipeline container
+│   │   │   ├── StageDetail.tsx      # Expanded stage view (tabs, reasoning, prompt, audit)
+│   │   │   └── StageStrip.tsx       # Vertical stage list with status dots
 │   │   ├── BiasSelector.tsx
-│   │   ├── ConfigureApiScreen.tsx
-│   │   ├── CountryMap.tsx
-│   │   ├── CountrySearch.tsx
-│   │   ├── NewsroomScreen.tsx
-│   │   └── ScreenTabs.tsx
+│   │   ├── ConfigureApiScreen.tsx   # API configuration screen
+│   │   ├── CountryMap.tsx           # Leaflet map for country selection
+│   │   ├── CountrySearch.tsx        # Searchable country dropdown
+│   │   ├── NewsroomScreen.tsx       # Main newsroom configuration screen
+│   │   └── ScreenTabs.tsx           # Tab navigation (Newsroom / Configure)
 │   ├── data/                 # Static data & configuration
-│   │   ├── bias.ts
-│   │   ├── countries.ts      # 195-country dataset with news sources & languages
-│   │   ├── countryBounds.ts
-│   │   ├── music.ts
-│   │   ├── timeframes.ts
-│   │   ├── topics.ts         # Topic taxonomy with translations
-│   │   └── voices.ts
+│   │   ├── bias.ts                  # Bias options and editorial instructions
+│   │   ├── countries.ts             # 195-country dataset with news sources & languages
+│   │   ├── countryBounds.ts         # Map bounding boxes per continent
+│   │   ├── music.ts                 # Music styles, suites, file mappings
+│   │   ├── timeframes.ts            # Daily / weekly / monthly configs
+│   │   ├── topics.ts                # Topic taxonomy with multi-language search terms
+│   │   └── voices.ts                # Voice configs with instructions and previews
 │   ├── lib/                  # Core logic
-│   │   ├── apiConfig.ts      # API persistence, LLM calls, SSE streaming, Brave key storage
-│   │   ├── fileManager.ts    # File I/O via @capacitor/filesystem (segment files, full_script.txt)
-│   │   ├── llmAdapter.ts     # Model-independent LLM request builder with error-driven adaptive retry
-│   │   ├── newsSearch.ts     # Brave Search API wrapper with fallback chain
-│   │   ├── pipeline.ts       # Pipeline runner state machine with parallel topic loop + stall recovery
-│   │   ├── pipelineTypes.ts  # Pipeline type definitions (AuditResult, TopicLoopState, etc.)
-│   │   ├── scriptParser.ts   # XML segment parser, assembler, tag stripper for TTS
-│   │   ├── sessionConfig.ts  # SessionConfig builder & formatter
-│   │   └── utils.ts
-│   ├── prompts/
-│   │   ├── agent1.ts              # Agent 1 prompt builder — XML segment output instructions
-│   │   ├── fullScriptWriter.ts    # Full Script Writer prompt — preserve XML tags, rewrite everything
-│   │   ├── fullScriptEditor.ts    # Full Script Editor prompt — per-theme audit + rewrite_scope routing
-│   │   ├── segmentWriter.ts       # Segment Writer prompt — rewrite only failing segments + transition context
-│   │   ├── segmentEditor.ts       # Segment Editor prompt — audit rewritten segments + transition checks
-│   │   └── shared/                # Permanent, session-independent prompt building blocks
+│   │   ├── apiConfig.ts             # API persistence, LLM calls, SSE streaming, test connection
+│   │   ├── audioAssembler.ts        # TTS generation, Web Audio mixing, MP3 encoding
+│   │   ├── fileManager.ts           # File I/O via @capacitor/filesystem
+│   │   ├── llmAdapter.ts            # Model-independent LLM request builder with adaptive retry
+│   │   ├── mechanicalValidator.ts   # Pure-code segment validation (length, sentences)
+│   │   ├── mp3Encoder.ts            # lamejs MP3 encoding wrapper
+│   │   ├── newsSearch.ts            # Brave Search API wrapper with fallback chain
+│   │   ├── pipeline.ts              # PipelineRunner state machine
+│   │   ├── pipelineNotifications.ts # Capacitor local notifications for background progress
+│   │   ├── pipelineService.ts       # Capacitor background service bindings
+│   │   ├── pipelineTypes.ts         # Pipeline type definitions
+│   │   ├── scriptParser.ts          # XML segment parser, assembler, tag stripper
+│   │   ├── sessionConfig.ts         # SessionConfig builder & formatter
+│   │   └── utils.ts                 # Utility helpers (cn from tailwind-merge + clsx)
+│   ├── prompts/              # Prompt builders
+│   │   ├── agent1.ts                # Researcher prompt
+│   │   ├── fullScriptWriter.ts      # Full Script Writer prompt
+│   │   ├── fullScriptEditor.ts      # Full Script Editor prompt
+│   │   ├── segmentWriter.ts         # Segment Writer prompt
+│   │   ├── segmentEditor.ts         # Segment Editor prompt
+│   │   └── shared/                  # Shared prompt building blocks
 │   │       └── completenessRequirements.ts
-│   ├── App.tsx               # Main application component with tab router
-│   ├── index.css
-│   ├── main.tsx
+│   ├── App.tsx               # Main app component with tab router
+│   ├── index.css             # Global styles + Tailwind directives
+│   ├── main.tsx              # React root render
 │   └── types.ts              # Shared TypeScript interfaces
 ├── .github/workflows/
-│   └── build-android.yml     # APK build workflow
-├── capacitor.config.ts
-├── index.html
-├── package.json
-├── tailwind.config.js
-├── tsconfig.json
-└── vite.config.ts
+│   └── build-android.yml     # GitHub Actions APK build workflow
+├── capacitor.config.ts       # Capacitor configuration
+├── index.html                # Vite entry HTML
+├── package.json              # Dependencies & scripts
+├── tailwind.config.js        # Tailwind CSS configuration
+├── tsconfig.json             # TypeScript configuration
+└── vite.config.ts            # Vite build configuration
 ```
 
 ---
@@ -436,10 +567,10 @@ This means you can plug in Kimi, DeepSeek, Claude via OpenRouter, local Ollama m
 
 ## Usage
 
-1. **Configure your APIs** — Go to Configure API, add your LLM provider key AND your Brave Search API key, save and test both
-2. **Configure your podcast** — Go to Newsroom, pick a country, timeframe, **exactly 3 topics**, voice, music, and editorial angle
-3. **Run Full Pipeline** — Tap the button and watch the agents work
-4. **Inspect stages** — Tap any stage card to see reasoning, the full LLM prompt, the first draft, the structured audit, and output
+1. **Configure your APIs** — Go to Configure API, add your LLM provider key, Brave Search API key, and OpenAI TTS key. Save and test all three.
+2. **Configure your podcast** — Go to Newsroom, pick a country, timeframe, **exactly 3 topics**, voice, music, and editorial angle.
+3. **Run Full Pipeline** — Tap the button and watch the agents work.
+4. **Inspect stages** — Tap any stage card to see reasoning, the full LLM prompt, the first draft, the structured audit, and output.
 
 ---
 
