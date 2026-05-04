@@ -13,6 +13,7 @@ import {
   FileCheck,
   Layers,
   LayoutGrid,
+  RefreshCw,
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -33,6 +34,7 @@ interface StageStripProps {
   selectedStageId: string | null;
   pipelineStatus: PipelineStatus;
   onSelectStage: (id: string) => void;
+  onRerunFromStage?: (id: string) => void;
   topicLoop?: TopicLoopState;
 }
 
@@ -42,6 +44,7 @@ export default function StageStrip({
   selectedStageId,
   pipelineStatus,
   onSelectStage,
+  onRerunFromStage,
   topicLoop,
 }: StageStripProps) {
   return (
@@ -126,6 +129,20 @@ export default function StageStrip({
                 {stage.status === 'error' && 'Failed after 3 retries'}
               </div>
             </div>
+
+            {/* Re-run button for completed / failed stages */}
+            {!isActive && !isPending && onRerunFromStage && pipelineStatus !== 'running' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRerunFromStage(stage.id);
+                }}
+                title={`Re-run from ${stage.name}`}
+                className="flex-shrink-0 p-1 rounded-md hover:bg-slate-700/80 text-slate-400 hover:text-blue-300 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            )}
 
             {/* Active pulse indicator */}
             {isActive && (

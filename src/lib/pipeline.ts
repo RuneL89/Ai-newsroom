@@ -172,6 +172,9 @@ export class PipelineRunner {
         console.log(`[Pipeline] <<< Stage ${stage} completed — output draft length: ${result.draft.length}`);
         console.log(`[Pipeline] Draft preview: ${preview}`);
 
+        // Track current draft in state after each stage
+        this.updateState({ currentDraft: draft });
+
         // Determine next stage
         const next = await this.getNextStage(stage, result.metadata, draft);
 
@@ -207,6 +210,196 @@ export class PipelineRunner {
 
   getState(): PipelineState {
     return this.state;
+  }
+
+  async runFromStage(
+    startStageId: StageId,
+    sessionConfig: SessionConfig,
+    existingState: PipelineState,
+    testMode: boolean = false
+  ) {
+    this.abortController = new AbortController();
+    this.testMode = testMode;
+    await PipelineNotifications.start('Starting pipeline...');
+    await PipelineService.start();
+
+    // Determine which stages to reset based on start position
+    const stageOrder: StageId[] = [
+      'articleResearch', 'scriptWriter', 'fullScriptEditor', 'fullScriptWriter',
+      'topicLoop', 'assembler', 'agent6',
+    ];
+    const startIdx = stageOrder.indexOf(startStageId);
+
+    const stages = existingState.stages.map((s) => {
+      const stageIdx = stageOrder.indexOf(s.id);
+      if (stageIdx === -1) return s; // e.g. topicLoop is handled separately
+      if (stageIdx < startIdx) return s; // Keep prior stages intact
+      if (stageIdx === startIdx) {
+        // Reset starting stage: clear outputs but keep iteration so executeStage increments it
+        return {
+          ...s,
+          status: 'pending' as StageStatus,
+          reasoning: '',
+          output: '',
+          metadata: undefined,
+          startedAt: undefined,
+          completedAt: undefined,
+        };
+      }
+      // Reset subsequent stages fully
+      return {
+        ...s,
+        status: 'pending' as StageStatus,
+        iteration: 0,
+        reasoning: '',
+        output: '',
+        metadata: undefined,
+        startedAt: undefined,
+        completedAt: undefined,
+      };
+    });
+
+    // Determine topicLoop / hasRunTopicLoop state
+    let hasRunTopicLoop = existingState.hasRunTopicLoop;
+    let topicLoop = existingState.topicLoop;
+    if (startStageId === 'topicLoop') {
+      // Re-running topicLoop itself: reset it
+      hasRunTopicLoop = false;
+      topicLoop = undefined;
+    } else if (startStageId === 'assembler' || startStageId === 'agent6') {
+      // After topicLoop: keep existing topic loop results
+      // hasRunTopicLoop stays true
+    } else if (startStageId === 'fullScriptEditor' && hasRunTopicLoop) {
+      // Re-running second-pass fullScriptEditor: keep topic loop results
+    } else {
+      // Re-running from before topicLoop: clear it
+      hasRunTopicLoop = false;
+      topicLoop = undefined;
+    }
+
+    this.state = {
+      ...existingState,
+      status: 'running',
+      currentStageId: null,
+      stages,
+      error: null,
+      finalDraft: null,
+      hasRunTopicLoop,
+      topicLoop,
+    };
+
+    try {
+      this.sessionConfig = sessionConfig;
+      const { draft: initialDraft, feedback: initialFeedback } = this.getRunFromInputs(
+        startStageId,
+        stages
+      );
+      let stage: StageId = startStageId;
+      let draft = initialDraft;
+      let feedback: unknown = initialFeedback;
+
+      while (true) {
+        if (this.abortController.signal.aborted) {
+          throw new Error('Pipeline aborted by user');
+        }
+
+        console.log(`[Pipeline] >>> Stage ${stage} starting — draft length: ${draft.length}`);
+
+        // topicLoop is not a regular agent stage; handle it specially
+        if (stage === 'topicLoop') {
+          await this.runParallelTopicLoop(sessionConfig, draft);
+          this.updateState({ hasRunTopicLoop: true });
+          stage = 'assembler';
+          feedback = undefined;
+          continue;
+        }
+
+        const result = await this.executeStage(stage, sessionConfig, draft, feedback);
+        draft = result.draft;
+        feedback = result.metadata;
+
+        // Track current draft in state after each stage
+        this.updateState({ currentDraft: draft });
+
+        const preview = result.draft.length > 200
+          ? `${result.draft.slice(0, 100)} ... ${result.draft.slice(-100)}`
+          : result.draft;
+        console.log(`[Pipeline] <<< Stage ${stage} completed — output draft length: ${result.draft.length}`);
+        console.log(`[Pipeline] Draft preview: ${preview}`);
+
+        const next = await this.getNextStage(stage, result.metadata, draft);
+
+        if (next === 'COMPLETE' || next === null) {
+          this.updateState({
+            status: 'complete',
+            currentStageId: null,
+            finalDraft: draft,
+          });
+          await PipelineNotifications.stop();
+          await PipelineService.stop();
+          this.callbacks.onComplete(draft);
+          return;
+        }
+
+        stage = next;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.updateState({ status: 'error', error: message });
+      await PipelineNotifications.stop();
+      await PipelineService.stop();
+      this.callbacks.onError(message);
+    }
+  }
+
+  private getRunFromInputs(
+    startStageId: StageId,
+    stages: StageRecord[]
+  ): { draft: string; feedback: unknown } {
+    const findStage = (id: StageId) => stages.find((s) => s.id === id);
+
+    switch (startStageId) {
+      case 'articleResearch':
+        return { draft: '', feedback: undefined };
+
+      case 'scriptWriter':
+        return { draft: '', feedback: undefined };
+
+      case 'fullScriptEditor': {
+        // Second pass if assembler has already completed
+        const assembler = findStage('assembler');
+        if (assembler?.status === 'completed') {
+          return { draft: assembler.output, feedback: undefined };
+        }
+        // First pass
+        const scriptWriter = findStage('scriptWriter');
+        return { draft: scriptWriter?.output ?? '', feedback: undefined };
+      }
+
+      case 'fullScriptWriter': {
+        const editor = findStage('fullScriptEditor');
+        return { draft: editor?.output ?? '', feedback: editor?.metadata };
+      }
+
+      case 'topicLoop':
+      case 'assembler': {
+        // Draft is whatever was produced before the topic loop
+        const editor = findStage('fullScriptEditor');
+        const writer = findStage('fullScriptWriter');
+        if (editor?.status === 'completed') {
+          return { draft: editor.output, feedback: undefined };
+        }
+        return { draft: writer?.output ?? '', feedback: undefined };
+      }
+
+      case 'agent6': {
+        const editor = findStage('fullScriptEditor');
+        return { draft: editor?.output ?? '', feedback: undefined };
+      }
+
+      default:
+        return { draft: '', feedback: undefined };
+    }
   }
 
   private async executeStage(

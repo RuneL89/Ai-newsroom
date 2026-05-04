@@ -93,6 +93,48 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     runnerRef.current?.stop();
   }, []);
 
+  const handleRerunFromStage = useCallback(
+    (stageId: string) => {
+      const outputFileName = getPodcastFileName(sessionConfig);
+      const agents = createAgentMap();
+      const runner = new PipelineRunner(agents, {
+        onStateChange: (newState) => {
+          setState((prev) => ({ ...prev, ...newState, selectedStageId: prev.selectedStageId }));
+        },
+        onComplete: async (draft) => {
+          console.log('Pipeline complete:', draft);
+          try {
+            const bytes = await readAudioFileBinary(outputFileName);
+            if (bytes) {
+              const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'audio/mpeg' });
+              const url = URL.createObjectURL(blob);
+              setPodcastUrl(url);
+            }
+          } catch (err) {
+            console.error('Failed to load podcast:', err);
+          }
+          try {
+            const exported = await exportPodcastToDocuments(outputFileName);
+            if (exported) {
+              console.log('[PipelinePanel] Podcast exported to Documents/Newsroom');
+            } else {
+              console.log('[PipelinePanel] Podcast export to Documents failed — file remains in app-private storage');
+            }
+          } catch (err) {
+            console.error('[PipelinePanel] Export error:', err);
+          }
+        },
+        onError: (error) => {
+          console.error('Pipeline error:', error);
+        },
+      });
+
+      runnerRef.current = runner;
+      runner.runFromStage(stageId as StageId, sessionConfig, state, testMode);
+    },
+    [sessionConfig, state, testMode]
+  );
+
   const handleSelectStage = useCallback((id: string) => {
     setState((prev) => ({ ...prev, selectedStageId: id as StageId }));
   }, []);
@@ -230,6 +272,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
           selectedStageId={state.selectedStageId}
           pipelineStatus={state.status}
           onSelectStage={handleSelectStage}
+          onRerunFromStage={handleRerunFromStage}
           topicLoop={state.topicLoop}
         />
       )}
