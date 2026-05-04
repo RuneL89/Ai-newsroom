@@ -15,8 +15,8 @@ export interface FetchedArticle {
   tier: 1 | 2 | 3;
 }
 
-const JINA_TIMEOUT_MS = 8000;
-const DIRECT_TIMEOUT_MS = 8000;
+const JINA_TIMEOUT_MS = 5000;
+const DIRECT_TIMEOUT_MS = 6000;
 const MIN_WORDS_JINA = 80;
 const MIN_WORDS_DIRECT = 80;
 const MIN_WORDS_DESCRIPTION = 20;

@@ -7,9 +7,6 @@ import { clearAllSegments, writeSelectedArticles, type SelectedArticlesMap } fro
 import { fetchArticle, truncateToWords } from '../lib/articleFetcher';
 import type { Topic } from '../types';
 
-const MAX_BUCKET_ATTEMPTS = 3;
-const SCORE_GATE_MIN = 6.0;
-const SCORE_GATE_AVG = 7.0;
 const MAX_BACKUPS = 2;
 const MAIN_TRUNCATE_WORDS = 2000;
 const BACKUP_TRUNCATE_WORDS = 500;
@@ -83,7 +80,7 @@ export function createArticleResearcher(): AgentFn {
     onReasoningChunk(`Total: ${totalLocal} local, ${totalContinent} continent articles.\n`);
 
     // ========================================================================
-    // PHASE 2: Score + Gate
+    // PHASE 2: Score all articles, pick highest per bucket
     // ========================================================================
     const bucketResults: BucketResult[] = [];
 
@@ -91,88 +88,57 @@ export function createArticleResearcher(): AgentFn {
       const sr = searchResults[i];
       for (const scope of ['local', 'continent'] as const) {
         const bucketName = `${sr.topic} ${scope === 'local' ? 'Local' : 'Continent'}`;
-        const baseArticles = scope === 'local' ? sr.local : sr.continent;
+        const currentArticles = scope === 'local' ? sr.local : sr.continent;
 
-        onReasoningChunk(`\nScoring bucket: ${bucketName} (${baseArticles.length} articles)...\n`);
+        onReasoningChunk(`\nScoring bucket: ${bucketName} (${currentArticles.length} articles)...\n`);
 
-        let attempt = 0;
-        let currentArticles = baseArticles;
+        if (currentArticles.length === 0) {
+          onReasoningChunk(`  No articles in bucket.\n`);
+          bucketResults.push({
+            name: bucketName,
+            scope,
+            topic: sr.topic,
+            articles: currentArticles,
+            scores: [],
+            selectedMain: null,
+          });
+          continue;
+        }
+
+        const prompt = buildScoringPrompt(bucketName, currentArticles.map(a => ({
+          title: a.title,
+          description: a.description,
+          source: a.source,
+          url: a.url,
+        })));
+
+        const { content } = await callLLM(apiConfig.lightweight, prompt);
+
         let scores: ScoredArticle[] = [];
-        let mainArticle: NewsArticle | null = null;
+        try {
+          const jsonMatch = content.match(/\[[\s\S]*\]/);
+          scores = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+        } catch {
+          onReasoningChunk(`  Failed to parse scores — using fallback ranking.\n`);
+          // Fallback: score by title+description length as a proxy
+          scores = currentArticles.map((_, idx) => ({
+            index: idx,
+            impact: 5,
+            prominence: 5,
+            rarity: 5,
+            conflict: 5,
+            average: 5,
+          }));
+        }
 
-        while (attempt < MAX_BUCKET_ATTEMPTS) {
-          if (attempt > 0) {
-            onReasoningChunk(`  Re-fetch attempt ${attempt} for ${bucketName}...\n`);
-            const extra = scope === 'local'
-              ? await searchTopicLocal({
-                  countryCode: country.code,
-                  countryName: country.name,
-                  topicQuery: getTopicSearchTerm(sr.topic, country.language),
-                  freshness,
-                  pageSize: 10,
-                  offset: attempt * 10,
-                })
-              : await searchTopicContinent({
-                  continentName: continent.name,
-                  topicQuery: getTopicSearchTerm(sr.topic, country.language),
-                  freshness,
-                  pageSize: 10,
-                  offset: attempt * 10,
-                });
-            const seen = new Set(currentArticles.map(a => a.url));
-            const newOnes = extra.filter(a => !seen.has(a.url));
-            currentArticles = [...currentArticles, ...newOnes];
-            onReasoningChunk(`  Added ${newOnes.length} new articles.\n`);
-          }
+        const ranked = scores
+          .map((s, idx) => ({ score: s, article: currentArticles[idx] }))
+          .filter(x => x.article !== undefined)
+          .sort((a, b) => b.score.average - a.score.average);
 
-          if (currentArticles.length === 0) {
-            onReasoningChunk(`  No articles in bucket.\n`);
-            break;
-          }
-
-          const prompt = buildScoringPrompt(bucketName, currentArticles.map(a => ({
-            title: a.title,
-            description: a.description,
-            source: a.source,
-            url: a.url,
-          })));
-
-          const { content } = await callLLM(apiConfig.lightweight, prompt);
-
-          let parsedScores: ScoredArticle[] = [];
-          try {
-            const jsonMatch = content.match(/\[[\s\S]*\]/);
-            parsedScores = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-          } catch {
-            onReasoningChunk(`  Failed to parse scores. Retrying...\n`);
-            attempt++;
-            continue;
-          }
-
-          scores = parsedScores;
-
-          const ranked = scores
-            .map((s, idx) => ({ score: s, article: currentArticles[idx] }))
-            .filter(x => x.article !== undefined)
-            .sort((a, b) => b.score.average - a.score.average);
-
-          const passed = ranked.find(r =>
-            r.score.average >= SCORE_GATE_AVG &&
-            r.score.impact >= SCORE_GATE_MIN &&
-            r.score.prominence >= SCORE_GATE_MIN &&
-            r.score.rarity >= SCORE_GATE_MIN &&
-            r.score.conflict >= SCORE_GATE_MIN
-          );
-
-          if (passed) {
-            mainArticle = passed.article;
-            onReasoningChunk(`  Selected: "${passed.article.title}" (${passed.score.average.toFixed(1)} avg)\n`);
-            break;
-          } else if (ranked.length > 0) {
-            onReasoningChunk(`  Best article scored ${ranked[0].score.average.toFixed(1)} — below gate.\n`);
-          }
-
-          attempt++;
+        const mainArticle = ranked.length > 0 ? ranked[0].article : null;
+        if (mainArticle) {
+          onReasoningChunk(`  Selected: "${mainArticle.title}" (${ranked[0].score.average.toFixed(1)} avg)\n`);
         }
 
         bucketResults.push({
@@ -187,22 +153,12 @@ export function createArticleResearcher(): AgentFn {
     }
 
     // ========================================================================
-    // PHASE 3: Select 8 mains + backups
+    // PHASE 3: Build 8 slots from best articles
     // ========================================================================
     const localBuckets = bucketResults.filter(b => b.scope === 'local');
     const continentBuckets = bucketResults.filter(b => b.scope === 'continent');
 
-    const continentMains = continentBuckets.map(b => b.selectedMain).filter((a): a is NewsArticle => a !== null);
-    if (continentMains.length < 3) {
-      throw new Error(`Only ${continentMains.length}/3 continent buckets passed the gate.`);
-    }
-
-    const localMains = localBuckets.map(b => b.selectedMain).filter((a): a is NewsArticle => a !== null);
-    if (localMains.length < 3) {
-      throw new Error(`Only ${localMains.length}/3 local buckets passed the gate.`);
-    }
-
-    // Wildcard locals from runner-ups
+    // Wildcard locals from runner-ups across all local buckets
     const localRunnerUps: { article: NewsArticle; score: number; bucket: BucketResult }[] = [];
     localBuckets.forEach(b => {
       const ranked = b.scores
@@ -216,15 +172,36 @@ export function createArticleResearcher(): AgentFn {
     localRunnerUps.sort((a, b) => b.score - a.score);
     const wildcardMains = localRunnerUps.slice(0, 2).map(r => r.article);
 
-    if (localMains.length + wildcardMains.length < 5) {
-      throw new Error(`Only ${localMains.length + wildcardMains.length}/5 local articles available.`);
+    // Assemble 8 slots — always pick best available, never fail
+    const allMains: { article: NewsArticle; scope: 'local' | 'continent'; topic: Topic; bucket: BucketResult }[] = [];
+
+    // Slots 1-3: topic locals
+    for (let i = 0; i < 3; i++) {
+      const bucket = localBuckets[i];
+      if (bucket?.selectedMain) {
+        allMains.push({ article: bucket.selectedMain, scope: 'local', topic: topics[i], bucket });
+      }
     }
 
-    const allMains = [
-      ...localMains.slice(0, 3).map((a, i) => ({ article: a, scope: 'local' as const, topic: topics[i], bucket: localBuckets[i] })),
-      ...wildcardMains.map((a, i) => ({ article: a, scope: 'local' as const, topic: localRunnerUps[i]?.bucket?.topic ?? topics[0], bucket: localRunnerUps[i]?.bucket ?? localBuckets[0] })),
-      ...continentMains.slice(0, 3).map((a, i) => ({ article: a, scope: 'continent' as const, topic: topics[i], bucket: continentBuckets[i] })),
-    ];
+    // Slots 4-5: wildcard locals
+    for (const article of wildcardMains) {
+      const runnerUp = localRunnerUps.find(r => r.article.url === article.url);
+      allMains.push({ article, scope: 'local', topic: runnerUp?.bucket?.topic ?? topics[0], bucket: runnerUp?.bucket ?? localBuckets[0] });
+    }
+
+    // Slots 6-8: topic continents
+    for (let i = 0; i < 3; i++) {
+      const bucket = continentBuckets[i];
+      if (bucket?.selectedMain) {
+        allMains.push({ article: bucket.selectedMain, scope: 'continent', topic: topics[i], bucket });
+      }
+    }
+
+    if (allMains.length < 8) {
+      onReasoningChunk(`\nWarning: Only ${allMains.length}/8 slots filled. Some buckets had no articles.\n`);
+    } else {
+      onReasoningChunk(`\nFilled ${allMains.length}/8 article slots.\n`);
+    }
 
     // ========================================================================
     // PHASE 4: Full-text fetch
