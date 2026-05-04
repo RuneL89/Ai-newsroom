@@ -1,6 +1,6 @@
 import type { AgentFn } from '../lib/pipelineTypes';
 import { loadApiConfig, callLLM } from '../lib/apiConfig';
-import { searchTopicLocal, searchTopicContinent, type NewsArticle } from '../lib/newsSearch';
+import { searchTopicLocal, searchTopicContinent, buildCountryGoggles, buildContinentGoggles, type NewsArticle } from '../lib/newsSearch';
 import { buildScoringPrompt, type ScoredArticle } from '../prompts/articleResearcher';
 import { getTopicSearchTerm } from '../data/topics';
 import { clearAllSegments, writeSelectedArticles, type SelectedArticlesMap } from '../lib/fileManager';
@@ -49,6 +49,9 @@ export function createArticleResearcher(): AgentFn {
     // ========================================================================
     const searchResults: { local: NewsArticle[]; continent: NewsArticle[]; topic: Topic }[] = [];
 
+    const countryGoggles = buildCountryGoggles(country.code);
+    const continentGoggles = buildContinentGoggles(continent.code);
+
     for (let i = 0; i < topics.length; i++) {
       const topic = topics[i];
       const topicTerm = getTopicSearchTerm(topic, country.language);
@@ -60,6 +63,7 @@ export function createArticleResearcher(): AgentFn {
         topicQuery: topicTerm,
         freshness,
         pageSize: 10,
+        goggles: countryGoggles,
       });
       onReasoningChunk(`  Found ${localArticles.length} local articles.\n`);
 
@@ -69,6 +73,7 @@ export function createArticleResearcher(): AgentFn {
         topicQuery: topicTerm,
         freshness,
         pageSize: 10,
+        goggles: continentGoggles,
       });
       onReasoningChunk(`  Found ${continentArticles.length} continent articles.\n`);
 

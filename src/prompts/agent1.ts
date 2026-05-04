@@ -43,7 +43,7 @@ export function buildAgent1Prompt(
   const biasInstructions = biasAgent1Instructions[config.editorial.biasId];
   const biasGuidelines = biasEditorialGuidelines[config.editorial.biasId];
 
-  const countrySources = config.geography.country.newsSources.join(', ');
+  const countrySources = config.geography.country.newsSources.map(s => typeof s === 'string' ? s : s.name).join(', ');
   const continentSources = config.geography.continent.newsSources.map(s => s.name).join(', ');
 
   // Build per-topic article context

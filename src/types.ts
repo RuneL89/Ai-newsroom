@@ -3,6 +3,7 @@ export type ContinentCode = 'EU' | 'AS' | 'ME' | 'NA' | 'SA' | 'AF' | 'OC';
 export interface ContinentNewsSource {
   name: string;
   language: string;
+  domain?: string;
 }
 
 export interface Continent {
@@ -20,7 +21,7 @@ export interface Country {
   continentCode: ContinentCode;
   center: [number, number];
   zoom: number;
-  newsSources: string[];
+  newsSources: { name: string; domain?: string }[];
   language: string;
 }
 
