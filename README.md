@@ -6,6 +6,17 @@ Choose from 37 countries supported by Brave Search. Pick three news topics, a vo
 
 A full newsroom in your pocket. No waiting for established media to report. Just you, your API keys, and a fully autonomous pipeline that turns raw global events into a polished, curated audio broadcast tailored exactly to your perspective.
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [The Agents](#the-agents)
+- [The Pipeline](#the-pipeline)
+- [Pipeline in Detail](#pipeline-in-detail)
+- [Technical Architecture](#technical-architecture)
+- [Project Structure](#project-structure)
+- [Download](#download)
+- [Usage](#usage)
+
 ---
 
 ## What It Does
@@ -632,8 +643,3 @@ Each agent prompt imports these requirements and embeds them verbatim. This ensu
 3. **Run Full Pipeline** — Tap the button and watch the agents work.
 4. **Inspect stages** — Tap any stage card to see reasoning, the full LLM prompt, the first draft, the structured audit, and output.
 
----
-
-## Repository
-
-https://github.com/atavist89-max/Ai-newsroom
