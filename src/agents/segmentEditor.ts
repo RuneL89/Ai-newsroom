@@ -2,7 +2,7 @@ import type { AgentFn } from '../lib/pipelineTypes';
 import { loadApiConfig, streamLLM } from '../lib/apiConfig';
 import { buildSegmentEditorPrompt } from '../prompts/segmentEditor';
 import { parseFullScriptEditorOutput } from './fullScriptEditorParse';
-import { readSegment, type SegmentId } from '../lib/fileManager';
+import { readSegment, readSelectedArticles, type SegmentId } from '../lib/fileManager';
 import { validateMechanical, buildMechanicalFeedback } from '../lib/mechanicalValidator';
 
 const INDEX_TO_SEGMENT: SegmentId[] = [
@@ -20,9 +20,33 @@ export function createSegmentEditor(): AgentFn {
 
     const targetSegmentId = INDEX_TO_SEGMENT[segmentLoopIndex];
     const targetStoryId = segmentLoopIndex + 1;
-    const topicName = targetSegmentId === 'editorial'
-      ? 'Editorial'
-      : sessionConfig.content.topics[segmentLoopIndex % 3] ?? 'Unknown';
+
+    // Determine the correct topic for this segment
+    let topicName: string;
+    if (targetSegmentId === 'editorial') {
+      topicName = 'Editorial';
+    } else if (targetSegmentId === 'article1') {
+      topicName = sessionConfig.content.topics[0] ?? 'Unknown';
+    } else if (targetSegmentId === 'article2') {
+      topicName = sessionConfig.content.topics[1] ?? 'Unknown';
+    } else if (targetSegmentId === 'article3') {
+      topicName = sessionConfig.content.topics[2] ?? 'Unknown';
+    } else if (targetSegmentId === 'article4' || targetSegmentId === 'article5') {
+      const selectedMap = await readSelectedArticles();
+      if (targetSegmentId === 'article4') {
+        topicName = selectedMap['article4']?.topic || sessionConfig.content.topics[0] ?? 'Unknown';
+      } else {
+        topicName = selectedMap['article5']?.topic || sessionConfig.content.topics[1] ?? 'Unknown';
+      }
+    } else if (targetSegmentId === 'article6') {
+      topicName = sessionConfig.content.topics[0] ?? 'Unknown';
+    } else if (targetSegmentId === 'article7') {
+      topicName = sessionConfig.content.topics[1] ?? 'Unknown';
+    } else if (targetSegmentId === 'article8') {
+      topicName = sessionConfig.content.topics[2] ?? 'Unknown';
+    } else {
+      topicName = 'Unknown';
+    }
 
     // Read the target segment from disk
     onReasoningChunk(`Reading segment ${targetSegmentId} for focused audit...\n`);

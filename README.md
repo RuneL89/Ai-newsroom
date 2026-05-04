@@ -176,7 +176,7 @@ Every segment file is written to app-private storage via `@capacitor/filesystem`
 
 This is the first gate. The Editor reads `full_script.txt` and performs a **script-wide audit** with three checks only:
 
-1. **Structural completeness**: All segments present (intro, topic1–7, outro), XML tags intact
+1. **Structural completeness**: All segments present (intro, article1–8, editorial, outro), XML tags intact
 2. **Cross-topic coherence**: Transitions between topics, logical progression, cross-references, tone consistency
 3. **Bias consistency**: Headlines, topic order, language, source selection, and framing all align with the chosen editorial perspective
 
@@ -244,7 +244,7 @@ If approved, the pipeline proceeds to the Audio Producer.
 
 ### Step 6 — Audio Producer
 
-Reads all individual segment files (`intro.txt`, `Topic1-7.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.).
+Reads all individual segment files (`intro.txt`, `article1.txt`–`article8.txt`, `editorial.txt`, `outro.txt`), strips XML tags and music cue placeholders (`[INTRO: ...]`, `[STORY STING: ...]`, etc.).
 
 **Text-to-Speech**: Calls OpenAI TTS API (`gpt-4o-mini-tts`) with the selected voice and voice-specific instructions to generate per-segment MP3s. Long segments are automatically chunked at ~3000 characters to stay within TTS limits.
 
