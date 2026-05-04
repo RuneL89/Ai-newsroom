@@ -35,8 +35,8 @@ export async function loadApiConfig(): Promise<AppApiConfig> {
     const { value } = await Preferences.get({ key: API_CONFIG_KEY });
     if (value) {
       const parsed = JSON.parse(value) as Record<string, unknown>;
-      // Detect old flat format: has 'lightweightModel' or 'thinkingModel' keys, or no 'main' key
-      if ('lightweightModel' in parsed || 'thinkingModel' in parsed || !('main' in parsed)) {
+      // Detect old flat format: has 'lightweightModel' or 'thinkingModel' keys
+      if ('lightweightModel' in parsed || 'thinkingModel' in parsed) {
         return migrateOldConfig(parsed);
       }
       return { ...defaultAppApiConfig, ...parsed } as AppApiConfig;
@@ -344,7 +344,10 @@ function getBodyChanges(original: Record<string, unknown>, final: Record<string,
   return changes;
 }
 
-export async function testApiConnection(config: ApiConfig): Promise<{
+export async function testApiConnection(
+  config: ApiConfig,
+  expectThinking: boolean = false
+): Promise<{
   success: boolean;
   message: string;
   requestBody?: Record<string, unknown>;
@@ -384,7 +387,7 @@ export async function testApiConnection(config: ApiConfig): Promise<{
       message: 'Connection successful!',
       requestBody: finalBody,
       changes: changes.length > 0 ? changes : undefined,
-      warning: thinkingRemoved
+      warning: expectThinking && thinkingRemoved
         ? 'This model does not support thinking/reasoning. The app works best with thinking models (e.g. GPT-5.5, Claude 3.7 Sonnet, o3).'
         : undefined,
     };

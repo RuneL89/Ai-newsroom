@@ -97,7 +97,7 @@ export default function ConfigureApiScreen() {
     setIsTesting((prev) => ({ ...prev, [connection]: true }));
     setTestResults((prev) => ({ ...prev, [connection]: null }));
     try {
-      const result = await testApiConnection(config[connection]);
+      const result = await testApiConnection(config[connection], connection === 'thinking');
       setTestResults((prev) => ({ ...prev, [connection]: result }));
       if (result.success) {
         toast.success(`${CONNECTION_META[connection].label}: ${result.message}`);
