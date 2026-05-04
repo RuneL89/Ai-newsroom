@@ -1,30 +1,53 @@
 import { Preferences } from '@capacitor/preferences';
-import type { ApiConfig, ApiProvider } from '../types';
+import type { ApiConfig, AppApiConfig, ApiProvider } from '../types';
 import { fetchWithAdaptiveRetry, buildLlmBody } from './llmAdapter';
 
 const API_CONFIG_KEY = 'api_config';
 
-export const defaultApiConfig: ApiConfig = {
+const defaultSingleConfig: ApiConfig = {
   provider: 'openai',
   apiKey: '',
   baseUrl: '',
   model: 'gpt-4o',
 };
 
-export async function loadApiConfig(): Promise<ApiConfig> {
+export const defaultAppApiConfig: AppApiConfig = {
+  lightweight: { ...defaultSingleConfig, model: 'gpt-4o-mini' },
+  thinking: { ...defaultSingleConfig, model: 'o3-mini' },
+};
+
+function migrateOldConfig(parsed: Record<string, unknown>): AppApiConfig {
+  // Old flat format had provider, apiKey, baseUrl, model, lightweightModel, thinkingModel
+  const oldProvider = (parsed.provider as ApiProvider) || 'openai';
+  const oldApiKey = typeof parsed.apiKey === 'string' ? parsed.apiKey : '';
+  const oldBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : '';
+  const oldLightweight = typeof parsed.lightweightModel === 'string' ? parsed.lightweightModel : 'gpt-4o-mini';
+  const oldThinking = typeof parsed.thinkingModel === 'string' ? parsed.thinkingModel : 'o3-mini';
+
+  return {
+    lightweight: { provider: oldProvider, apiKey: oldApiKey, baseUrl: oldBaseUrl, model: oldLightweight },
+    thinking: { provider: oldProvider, apiKey: oldApiKey, baseUrl: oldBaseUrl, model: oldThinking },
+  };
+}
+
+export async function loadApiConfig(): Promise<AppApiConfig> {
   try {
     const { value } = await Preferences.get({ key: API_CONFIG_KEY });
     if (value) {
-      const parsed = JSON.parse(value) as Partial<ApiConfig>;
-      return { ...defaultApiConfig, ...parsed };
+      const parsed = JSON.parse(value) as Record<string, unknown>;
+      // Detect old flat format: has 'lightweightModel' or 'thinkingModel' keys
+      if ('lightweightModel' in parsed || 'thinkingModel' in parsed) {
+        return migrateOldConfig(parsed);
+      }
+      return { ...defaultAppApiConfig, ...parsed } as AppApiConfig;
     }
   } catch {
     // ignore parse errors
   }
-  return { ...defaultApiConfig };
+  return { ...defaultAppApiConfig };
 }
 
-export async function saveApiConfig(config: ApiConfig): Promise<void> {
+export async function saveApiConfig(config: AppApiConfig): Promise<void> {
   await Preferences.set({
     key: API_CONFIG_KEY,
     value: JSON.stringify(config),
@@ -41,13 +64,15 @@ export const providerOptions: { value: ApiProvider; label: string; defaultModel:
 
 export async function callLLM(
   config: ApiConfig,
-  prompt: string
+  prompt: string,
+  modelOverride?: string
 ): Promise<{ content: string; reasoning?: string }> {
   const url = config.baseUrl.trim()
     ? `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
     : 'https://api.openai.com/v1/chat/completions';
 
-  const body = buildLlmBody(config.model || 'gpt-4o', [
+  const model = modelOverride || config.model || 'gpt-4o';
+  const body = buildLlmBody(model, [
     { role: 'user', content: prompt },
   ], {
     maxTokens: 24000,
@@ -77,7 +102,8 @@ export interface StreamCallbacks {
 export async function streamLLM(
   config: ApiConfig,
   prompt: string,
-  callbacks: StreamCallbacks
+  callbacks: StreamCallbacks,
+  modelOverride?: string
 ): Promise<{ diagnostics: string[] }> {
   const url = config.baseUrl.trim()
     ? `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
@@ -91,8 +117,9 @@ export async function streamLLM(
   let finishReason: string | null = null;
   let doneViaDone = false;
 
+  const model = modelOverride || config.model || 'gpt-4o';
   const requestBody = buildLlmBody(
-    config.model || 'gpt-4o',
+    model,
     [{ role: 'user', content: prompt }],
     {
       stream: true,
@@ -317,7 +344,10 @@ function getBodyChanges(original: Record<string, unknown>, final: Record<string,
   return changes;
 }
 
-export async function testApiConnection(config: ApiConfig): Promise<{
+export async function testApiConnection(
+  config: ApiConfig,
+  expectThinking: boolean = false
+): Promise<{
   success: boolean;
   message: string;
   requestBody?: Record<string, unknown>;
@@ -357,7 +387,7 @@ export async function testApiConnection(config: ApiConfig): Promise<{
       message: 'Connection successful!',
       requestBody: finalBody,
       changes: changes.length > 0 ? changes : undefined,
-      warning: thinkingRemoved
+      warning: expectThinking && thinkingRemoved
         ? 'This model does not support thinking/reasoning. The app works best with thinking models (e.g. GPT-5.5, Claude 3.7 Sonnet, o3).'
         : undefined,
     };

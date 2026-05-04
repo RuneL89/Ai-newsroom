@@ -25,7 +25,7 @@ export interface SessionConfig {
       name: string;
       code: string;
       language: string;
-      newsSources: string[];
+      newsSources: { name: string; domain?: string }[];
     };
     continent: {
       name: string;

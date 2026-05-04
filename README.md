@@ -32,11 +32,12 @@ The pipeline is built around seven specialized agents. Each has a single job, an
 
 | # | Agent | What It Does | Why It Matters |
 |---|---|---|---|
-| 1 | **Researcher** | Searches the web for local and continental news across your 3 topics, then writes the first draft as XML-tagged segments | This is where the raw information comes from. Without the Researcher, nothing else can happen. It prioritizes local-language sources and country-specific news outlets |
-| 2 | **Full Script Editor** | Checks the entire script for structural completeness, cross-topic coherence, and consistent bias framing | Catches problems the Researcher can't see — like a topic that contradicts another, or a bias that drifts halfway through. Acts as the executive editor |
+| 1A | **Article Researcher** | Searches Brave Search for 8 article slots (5 local + 3 continental) with **Brave Goggles** source prioritization, scores candidates with a lightweight LLM, fetches full text via 3-tier fallback, and writes `selected_articles.json` | This is where the raw information comes from. It boosts trusted local news domains (`$boost=5`) and continent domains (`$boost=3`) via Brave Goggles, scores articles on Impact/Prominence/Rarity/Conflict (1–10), and collects 1 main + 1–2 backup sources per slot for multi-angle coverage |
+| 1B | **Script Writer** | Reads `selected_articles.json`, uses a thinking/reasoning model to write the full script as XML-tagged segments — 8 articles + intro/outro/editorial | The creative writer. Uses main sources as the backbone and backup sources for quotes, corroboration, and alternative angles. Produces all segment files in one pass |
+| 2 | **Full Script Editor** | Checks the entire script for structural completeness, cross-topic coherence, and consistent bias framing | Catches problems the Writer can't see — like a topic that contradicts another, or a bias that drifts halfway through. Acts as the executive editor |
 | 3 | **Full Script Writer** | Rewrites the full script based on the Editor's feedback, preserving all topic content while fixing framing and transitions | The fixer for script-wide problems. Never touches individual topics that have already passed their own audits |
-| 4 | **Segment Editor** | Audits one topic at a time — checking length, sentence structure, depth, accessibility, sourcing, and geography | The line editor. Runs mechanical checks (pure code, instant) plus qualitative rules (LLM). Every topic must pass before moving on |
-| 5 | **Segment Writer** | Rewrites a single topic when the Segment Editor rejects it, using adjacent segments for transition context | The specialist. Focuses on one topic at a time, fixing exactly what the editor flagged without breaking what already works |
+| 4 | **Segment Editor** | Audits one article at a time — checking length, sentence structure, depth, accessibility, sourcing, and geography | The line editor. Runs mechanical checks (pure code, instant) plus qualitative rules (LLM). Every article must pass before moving on |
+| 5 | **Segment Writer** | Rewrites a single article when the Segment Editor rejects it, using adjacent segments for transition context | The specialist. Focuses on one article at a time, fixing exactly what the editor flagged without breaking what already works |
 | 6 | **Assembler** | Pure code — reads all segment files and concatenates them into the final `full_script.txt` | The production assistant. No AI involved. Just reliable, repeatable assembly |
 | 7 | **Audio Producer** | Strips XML tags, generates narration via OpenAI TTS, mixes music stings between segments, and produces a single MP3 file | The sound engineer. Handles voice synthesis, audio mixing, gap timing, and incremental MP3 encoding to keep memory usage low |
 
@@ -48,51 +49,59 @@ The pipeline is built around seven specialized agents. Each has a single job, an
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        FULL PIPELINE FLOW                               │
 └─────────────────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────┐
-│  STEP 1: RESEARCHER                         │
-│  Query news → Write draft segments          │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  STEP 1A: ARTICLE RESEARCHER                    │
+│  Search → Score → Fetch (3-tier fallback)       │
+│  Write selected_articles.json                   │
+└─────────────────────────────────────────────────┘
                       │
                       ▼
-┌─────────────────────────────────────────────┐
-│  STEP 2: FULL SCRIPT EDITOR  (Pass 1)       │
-│  Check: segments present, coherence, bias   │
-└─────────────────────────────────────────────┘
-                           │
+┌─────────────────────────────────────────────────┐
+│  STEP 1B: SCRIPT WRITER                         │
+│  Read selected_articles.json → Write XML        │
+│  segments (article1–8 + intro/outro/editorial)  │
+└─────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────┐
+│  STEP 2: FULL SCRIPT EDITOR  (Pass 1)           │
+│  Check: segments present, coherence, bias       │
+└─────────────────────────────────────────────────┘
+                      │
         ┌─────────────┴──────────────────────────────────┐
         │      APPROVED                      REJECTED    │
-        ▼                                                ▼
-┌───────────────┐                             ┌─────────────────────────┐
-│               │                             │  STEP 2a: FULL SCRIPT   │
-│  ╔════════════╧══════════════════════════╗  │  WRITER                 │
-│  ║  PARALLEL TOPIC LOOP                 ║  │  Fix script-wide issues │
-│  ║  (Steps 3–3a, all topics at once)    ║  │                         │
-│  ║                                       ║  │  └─► back to Step 2     │
-│  ║  Step 3:  Segment Editor              ║  └─────────────────────────┘
-│  ║           (Topics 1–7 simultaneously) ║
-│  ║           ├─ APPROVED ─► done         ║
-│  ║           └─ REJECTED ─► Step 3a      ║
-│  ║                                       ║
-│  ║  Step 3a: Segment Writer              ║
-│  ║           (per-topic, eager retry)    ║
-│  ║           └─► back to Step 3          ║
-│  ║                                       ║
-│  ║  Round-based stall recovery:          ║
-│  ║  stalled topics retry together        ║
-│  ║  after each wave settles              ║
-│  ╚═════════════════╤═════════════════════╝
-│                    │
-│                    └─► after all topics approved
-│                                                ▼
-┌─────────────────┐
-│  STEP 4         │
-│  ASSEMBLER      │
-│  (pure code)    │
-│  Concatenate    │
-│  all TopicN.txt │
-└─────────────────┘
-        │
-        ▼
+        │                                                ▼
+        │                                        ┌─────────────────────────┐
+        ▼                                        │  STEP 2a: FULL SCRIPT   │
+   ╔════════════════════════════════════════╗    │  WRITER                 │
+   ║  PARALLEL ARTICLE LOOP                 ║    │  Fix script-wide issues │
+   ║  (Steps 3–3a, all articles at once)    ║    │                         │
+   ║                                        ║    │  └─► back to Step 2     │
+   ║  Step 3:  Segment Editor               ║    └─────────────────────────┘
+   ║           (Articles 1–9 simultaneously)║
+   ║           ├─ APPROVED ─► done          ║
+   ║           └─ REJECTED ─► Step 3a       ║
+   ║                                        ║
+   ║  Step 3a: Segment Writer               ║
+   ║           (per-article, eager retry)   ║
+   ║           └─► back to Step 3           ║
+   ║                                        ║
+   ║  Round-based stall recovery:           ║
+   ║  stalled articles retry together       ║
+   ║  after each wave settles               ║
+   ╚═════════════════╤══════════════════════╝
+                     │
+                     │  after all articles approved
+                     ▼                            
+            ┌─────────────────┐
+            │  STEP 4         │
+            │  ASSEMBLER      │
+            │  (pure code)    │
+            │  Concatenate    │
+            │  all segments   │
+            └─────────────────┘
+                    │
+                    ▼
 ┌──────────────────────────────────────────────┐
 │  STEP 5: FULL SCRIPT EDITOR  (Pass 2)        │
 │  Verify coherence & bias after rewrites      │
@@ -101,14 +110,14 @@ The pipeline is built around seven specialized agents. Each has a single job, an
         ┌─────────────┴───────────────────────┐
         │      APPROVED             REJECTED  │
         ▼                                     ▼
-┌─────────────────┐       ┌─────────────────────────┐
-│  STEP 6         │       │  STEP 5a: FULL SCRIPT   │
-│  AUDIO PRODUCER │       │  WRITER                 │
-│  (agent6)       │       │  Fix script-wide issues │
-│  Strip XML →    │       │                         │
-│  Generate audio │       │  └─► back to Step 5     │
-└─────────────────┘       │                         │
-        │                 └─────────────────────────┘
+┌─────────────────┐              ┌─────────────────────────┐
+│  STEP 6         │              │  STEP 5a: FULL SCRIPT   │
+│  AUDIO PRODUCER │              │  WRITER                 │
+│  (agent6)       │              │  Fix script-wide issues │
+│  Strip XML →    │              │                         │
+│  Generate audio │              │  └─► back to Step 5     │
+└─────────────────┘              │                         │
+        │                        └─────────────────────────┘
         ▼
        ✅ COMPLETE               
 ```
@@ -117,19 +126,38 @@ The pipeline is built around seven specialized agents. Each has a single job, an
 
 ## Pipeline in Detail
 
-### Step 1 — Researcher
+### Step 1A — Article Researcher
 
-The Researcher is the entry point. It takes your session configuration (country, topics, timeframe, voice, bias, music) and does two things:
+The Article Researcher is the entry point. It takes your session configuration and performs a multi-phase research pipeline:
 
-1. **Search**: For each of your 3 topics, it queries Brave Search twice — once for local news in the chosen country, once for continental news across the continent. Search terms are automatically translated into the country's primary language. The freshness filter adjusts based on your timeframe (`day`, `week`, or `month`). Up to 10 articles per query are collected.
+1. **Bucket search**: 8 search buckets are queried via Brave Search with **source-prioritized Goggles**:
+   - 3 topic-specific local buckets (`{topic} {country}`) — boosted with **country Goggles** (`$boost=5`) built from the country's trusted news source domains
+   - 2 wildcard local buckets (`news {country}`, `breaking {country}`)
+   - 3 topic-specific continent buckets (`{topic} {continent}`) — boosted with **continent Goggles** (`$boost=3`) built from the continent's trusted news source domains
+   Search terms are automatically translated into the country's primary language. The `freshness` param adjusts based on timeframe (`day`/`week`/`month`).
 
-2. **Write**: All search results are streamed to the LLM with a detailed prompt that includes the session context, completeness requirements, and editorial bias instructions. The LLM writes the first draft as XML-tagged segments: `<segment id="intro">`, `<segment id="topic1">` through `<segment id="topic7">`, and `<segment id="outro">`.
+2. **Scoring**: A lightweight LLM scores each candidate article on Impact, Prominence, Rarity, and Conflict (1–10). The highest-scoring article per bucket is selected — there is no absolute score threshold. Rank-based selection ensures the best available article is always picked, even in low-coverage regions.
 
-   - Topics 1–3 are local (each of your 3 topics, scoped to the chosen country)
-   - Topics 4–6 are continental (same 3 topics, scoped to the continent)
-   - Topic 7 is an optional editorial segment (if enabled in config)
+3. **Fetching**: Full article text is retrieved via a **3-tier fallback chain**:
+   - **Tier 1**: Jina AI Reader (`r.jina.ai/http://...`) — best quality, but rate-limits aggressively
+   - **Tier 2**: Direct fetch with browser headers + HTML stripping — rescues most premium sources (Guardian, BBC, AP, NYT, CNBC, Politico.eu, Spiegel, etc.)
+   - **Tier 3**: Brave Search description fallback — last resort, preserves at least title/source/summary
+   
+   Real-world recovery rate: **89.6%** overall (Jina alone: ~30%).
 
-The Researcher also writes `full_script.txt` — the concatenation of all segments — so the Full Script Editor has a complete document to audit.
+4. **Selection**: Each of the 8 slots gets 1 main article (truncated to 2000 words) + 1–2 backup articles (truncated to 500 words) covering the same broad story. Backups provide quotes, corroboration, and alternative angles.
+
+5. **Output**: Writes `selected_articles.json` to disk containing all sources with metadata (title, source, URL, word count, fetch tier, scope, topic).
+
+### Step 1B — Script Writer
+
+The Script Writer reads `selected_articles.json` and uses a **thinking/reasoning model** (e.g., `o3-mini`, `claude-sonnet-4-20250514`) to write the full script:
+
+- Uses main sources as the narrative backbone
+- Weaves in backup sources for quotes, corroboration, and alternative angles
+- Writes XML-tagged segments: `<segment id="intro">`, `<segment id="article1">` through `<segment id="article8">`, `<segment id="editorial">` (optional), `<segment id="outro">`
+- Articles 1–5 are local, articles 6–8 are continental
+- Also writes `full_script.txt` — the concatenation of all segments
 
 Every segment file is written to app-private storage via `@capacitor/filesystem` in `Directory.Data/newsroom/`. This means even if the app crashes mid-run, the files persist and can be inspected.
 
@@ -176,18 +204,20 @@ The UI shows a live mini-grid of colored dots — one per topic — updating in 
 
 **Stall recovery:** If an API call throws a retryable error (429 rate limit, timeout, network), that topic marks itself `stalled` and exits. After all active workers settle, a **retry wave** launches all stalled topics together. This repeats until every topic is approved or hits the max-attempts limit (5).
 
-**Topic labels:**
-- Topic 1: `{topic0}, {country}`
-- Topic 2: `{topic1}, {country}`
-- Topic 3: `{topic2}, {country}`
-- Topic 4: `{topic0}, {continent}`
-- Topic 5: `{topic1}, {continent}`
-- Topic 6: `{topic2}, {continent}`
-- Topic 7: `Editorial` (optional)
+**Article labels:**
+- Article 1: `{topic0}, {country}` (local)
+- Article 2: `{topic1}, {country}` (local)
+- Article 3: `{topic2}, {country}` (local)
+- Article 4: `Wildcard Local 1` (local)
+- Article 5: `Wildcard Local 2` (local)
+- Article 6: `{topic0}, {continent}` (continental)
+- Article 7: `{topic1}, {continent}` (continental)
+- Article 8: `{topic2}, {continent}` (continental)
+- Article 9: `Editorial` (optional)
 
 ### Step 4 — Assembler
 
-Pure code stage — no LLM call. Reads all individual `TopicN.txt` files, concatenates them in order (intro → topic1–7 → outro), and writes the final `full_script.txt`.
+Pure code stage — no LLM call. Reads all individual segment files (`intro.txt`, `article1.txt`–`article8.txt`, `editorial.txt`, `outro.txt`), concatenates them in order, and writes the final `full_script.txt`.
 
 The Assembler also detects missing segments and warns if any segment file is empty.
 
@@ -240,7 +270,7 @@ The finished file is named dynamically (e.g. `United States Daily Report - 2026-
 - **API failures retry 3 times per call** — then mark topic as stalled for round-based recovery
 - **Session context is ephemeral** — configuration exists only in memory for the current run; close the app and it disappears
 - **Segment files persist** — Every segment is written to app-private storage. Even if the app closes mid-run, the files remain for inspection.
-- **Test mode** — A "Skip Editor Loop" toggle in Configure API bypasses all editors and writers, routing Agent 1 → Agent 6 directly. Fast for testing the TTS/audio pipeline without burning API credits on editorial loops.
+- **Test mode** — A "Skip Editor Loop" toggle in Configure API bypasses all editors and the assembler, routing Article Researcher → Script Writer → Audio Producer directly. Fast for testing the TTS/audio pipeline without burning API credits on editorial loops.
 
 ---
 
@@ -287,22 +317,23 @@ The pipeline is orchestrated by `PipelineRunner` (`src/lib/pipeline.ts`), a stat
 9. **Retry logic**: If the agent throws, retry up to 3 times with exponential backoff (1s, 2s, 3s). User abort is not retried.
 
 **Stage routing (`getNextStage`):**
-- `agent1` → `fullScriptEditor` (or `agent6` in test mode)
+- `articleResearch` → `scriptWriter`
+- `scriptWriter` → `fullScriptEditor` (or `agent6` in test mode)
 - `fullScriptEditor` (rejected) → `fullScriptWriter` → back to `fullScriptEditor`
-- `fullScriptEditor` (approved, first pass) → triggers parallel topic loop → `assembler`
+- `fullScriptEditor` (approved, first pass) → triggers parallel article loop → `assembler`
 - `fullScriptEditor` (approved, second pass) → `agent6`
 - `assembler` → `fullScriptEditor` (second pass)
 - `agent6` → `COMPLETE`
 
-**Parallel topic loop (`runParallelTopicLoop`):**
-1. Creates `TopicStatus` array with 6 or 7 topics (7 if editorial segment enabled)
-2. **Phase 1 — Eager launch**: Creates a worker Promise for each topic via `runTopicWorker`, then `Promise.allSettled`
-3. **Phase 2 — Round-based retry**: While stalled topics exist, increment wave number, reset stalled topics to `pending`, and relaunch workers
+**Parallel article loop (`runParallelTopicLoop`):**
+1. Creates `TopicStatus` array with 8 or 9 articles (9 if editorial segment enabled)
+2. **Phase 1 — Eager launch**: Creates a worker Promise for each article via `runTopicWorker`, then `Promise.allSettled`
+3. **Phase 2 — Round-based retry**: While stalled articles exist, increment wave number, reset stalled articles to `pending`, and relaunch workers
 4. Each `runTopicWorker` runs an infinite loop:
    - Check max attempts (5)
    - Run `segmentEditor` → if approved, return. If rejected, run `segmentWriter` → loop back
-   - Retryable errors (429, timeout, network) mark topic as `stalled` and exit worker
-5. Topic updates are batched via a 50ms debounce timer to prevent UI thrashing
+   - Retryable errors (429, timeout, network) mark article as `stalled` and exit worker
+5. Article updates are batched via a 50ms debounce timer to prevent UI thrashing
 
 ### Agents
 
@@ -316,13 +347,21 @@ type AgentFn = (
 ) => Promise<AgentOutput>;
 ```
 
-**Agent 1 — Researcher (`src/agents/agent1.ts`)**
-- Queries Brave Search for local + continental articles per topic
-- Builds prompt via `buildAgent1Prompt` (`src/prompts/agent1.ts`)
-- Streams LLM response via `streamLLM`
+**Agent 1A — Article Researcher (`src/agents/articleResearcher.ts`)**
+- Queries Brave Search for 8 article buckets (3 topic locals + 2 wildcard locals + 3 topic continents)
+- Scores candidates with lightweight LLM via `callLLM` with `lightweightModel` override
+- Fetches full text via `fetchArticle` (`src/lib/articleFetcher.ts`) with 3-tier fallback
+- Gates on avg≥7.0, min≥6.0; up to 2 re-fetches per failing bucket
+- Writes `selected_articles.json` via `writeSelectedArticles` (`src/lib/fileManager.ts`)
+- Metadata includes: article count, selected articles list with scope/topic/tier/wordCount
+
+**Agent 1B — Script Writer (`src/agents/scriptWriter.ts`)**
+- Reads `selected_articles.json` from disk via `readSelectedArticles`
+- Uses thinking/reasoning model via `streamLLM` with `thinkingModel` override
+- Builds prompt via `buildScriptWriterPrompt` (`src/prompts/scriptWriter.ts`)
 - Parses XML segments via `parseFullScript` (`src/lib/scriptParser.ts`)
 - Writes segments to disk via `writeSegment` / `writeFullScript`
-- Metadata includes: article counts, topic groups, sources used, fallback flags, stream diagnostics
+- Metadata includes: segment count, total length, segment names
 
 **Agent 2 — Full Script Editor (`src/agents/fullScriptEditor.ts`)**
 - Reads `full_script.txt` from disk
@@ -376,10 +415,16 @@ type AgentFn = (
 `src/lib/llmAdapter.ts` provides model-independent LLM communication.
 
 **`buildLlmBody(model, messages, options)`** constructs the request body:
+- Accepts an explicit `model` parameter — enables per-call model overrides
 - Sends `max_completion_tokens` by default (OpenAI newer standard)
 - Sends `thinking: {type: 'enabled'}` for Anthropic models
 - Sends `reasoning_effort: 'medium'` for OpenAI reasoning models (gpt-5*, o*)
 - Thinking parameter is model-family-aware based on model name detection
+
+**Model configuration** (`ConfigureApiScreen`):
+- **Main Model**: Default model for most agents
+- **Lightweight Model**: Fast/cheap model for Article Researcher scoring (e.g., `gpt-4o-mini`, `claude-3-haiku`)
+- **Thinking Model**: Reasoning model for Script Writer and Editors (e.g., `o3-mini`, `claude-sonnet-4-20250514`)
 
 **`fetchWithAdaptiveRetry(url, headers, body, maxRetries=2)`** sends the request and handles errors:
 - On 4xx error, extracts error message and attempts to fix the body
@@ -394,16 +439,30 @@ type AgentFn = (
 - Calls `onReasoningChunk` for reasoning tokens, `onContentChunk` for content tokens
 - Handles stream errors and completion
 
-### News Search
+### News Search & Article Fetching
 
-`src/lib/newsSearch.ts` wraps the Brave Search API.
+`src/lib/newsSearch.ts` wraps the Brave Search API with **Brave Goggles** source prioritization.
 
-**`searchTopicLocal(params)`**: Searches for `"{topic} {countryName}"` with country-specific result filtering.
-**`searchTopicContinent(params)`**: Searches for `"{topic} {continentName}"` without country filtering.
+**Brave Goggles integration:**
+
+- **`buildCountryGoggles(countryCode)`**: Builds a Goggles string from the country's trusted news source domains (e.g. `$boost=5,site=lemonde.fr|$boost=5,site=lefigaro.fr|...`). Only sources with mapped domains are included.
+- **`buildContinentGoggles(continentCode)`**: Builds a Goggles string from the continent's trusted news source domains (e.g. `$boost=3,site=bbc.co.uk|$boost=3,site=reuters.com|...`).
+
+**`searchTopicLocal(params)`**: Searches for `"{topic} {countryName}"` with country-specific result filtering. If Goggles are provided, the topic search attempts use them first. If the Goggles search returns **zero results**, it automatically retries **without Goggles** for broader discovery. Internal fallback searches (e.g., generic `"{countryName} news"`) never use Goggles.
+
+**`searchTopicContinent(params)`**: Searches for `"{topic} {continentName}"` without country filtering. Same Goggles behavior as local search: tries with continent Goggles first, falls back to no-Goggles if zero results.
 
 Both use freshness filtering (`day`/`week`/`month`) and return up to 10 articles with title, description, source, URL, and published date.
 
-A fallback chain handles errors:
+`src/lib/articleFetcher.ts` provides **3-tier article fetching**:
+
+1. **Jina AI Reader** (`r.jina.ai/http://...`) — highest quality full-text extraction, but returns HTTP 429 under rapid-fire calls. A 500ms delay is inserted between Jina requests.
+2. **Direct fetch** — browser headers + HTML tag stripping. Rescues most premium sources (Guardian, BBC, AP, NYT, CNBC, Politico.eu, Spiegel). Hard blocks remain for `politico.com` and `reuters.com` (401/403).
+3. **Brave description fallback** — uses the search result description as a last resort.
+
+`truncateToWords(text, maxWords)` performs smart truncation at sentence boundaries.
+
+A fallback chain handles search errors:
 1. Primary search with translated topic term
 2. Fallback to English topic term
 3. Fallback to generic "news {country}"
@@ -412,7 +471,8 @@ A fallback chain handles errors:
 
 `src/lib/fileManager.ts` provides app-private file I/O via `@capacitor/filesystem`.
 
-**Segments**: `intro.txt`, `Topic1.txt`–`Topic7.txt`, `outro.txt` — stored in `Directory.Data/newsroom/`
+**Segments**: `intro.txt`, `article1.txt`–`article8.txt`, `editorial.txt`, `outro.txt` — stored in `Directory.Data/newsroom/`
+**Selected articles**: `selected_articles.json` — main + backup sources per article slot
 **Full script**: `full_script.txt` — same directory
 **Podcast**: `{Country} {Timeframe} Report - {YYYY-MM-DD}.mp3` — same directory
 

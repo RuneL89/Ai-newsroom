@@ -51,7 +51,8 @@ export default function NewsroomScreen({ sessionContext: _sessionContext, onSess
   // Check API keys on mount
   useEffect(() => {
     Promise.all([loadApiConfig(), loadBraveApiKey(), loadTtsApiKey()]).then(([llmConfig, braveKey, ttsKey]) => {
-      setHasApiKey(!!llmConfig.apiKey.trim() && !!braveKey.trim() && !!ttsKey.trim());
+      const hasLlmKey = !!llmConfig.lightweight.apiKey.trim() || !!llmConfig.thinking.apiKey.trim();
+      setHasApiKey(hasLlmKey && !!braveKey.trim() && !!ttsKey.trim());
     });
   }, []);
 
@@ -420,7 +421,7 @@ export default function NewsroomScreen({ sessionContext: _sessionContext, onSess
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-slate-500">Country Sources</span>
-                  <span className="text-white text-right">{selectedCountry ? selectedCountry.newsSources.join(', ') : '—'}</span>
+                  <span className="text-white text-right">{selectedCountry ? selectedCountry.newsSources.map(s => typeof s === 'string' ? s : s.name).join(', ') : '—'}</span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-slate-500">Continent Sources</span>
