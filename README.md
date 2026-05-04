@@ -32,7 +32,7 @@ The pipeline is built around seven specialized agents. Each has a single job, an
 
 | # | Agent | What It Does | Why It Matters |
 |---|---|---|---|
-| 1A | **Article Researcher** | Searches Brave Search for 8 article slots (5 local + 3 continental), scores candidates with a lightweight LLM, fetches full text via 3-tier fallback, and writes `selected_articles.json` | This is where the raw information comes from. It enforces strict timeframe filtering, scores articles on Impact/Prominence/Rarity/Conflict (1–10), and collects 1 main + 1–2 backup sources per slot for multi-angle coverage |
+| 1A | **Article Researcher** | Searches Brave Search for 8 article slots (5 local + 3 continental) with **Brave Goggles** source prioritization, scores candidates with a lightweight LLM, fetches full text via 3-tier fallback, and writes `selected_articles.json` | This is where the raw information comes from. It boosts trusted local news domains (`$boost=5`) and continent domains (`$boost=3`) via Brave Goggles, scores articles on Impact/Prominence/Rarity/Conflict (1–10), and collects 1 main + 1–2 backup sources per slot for multi-angle coverage |
 | 1B | **Script Writer** | Reads `selected_articles.json`, uses a thinking/reasoning model to write the full script as XML-tagged segments — 8 articles + intro/outro/editorial | The creative writer. Uses main sources as the backbone and backup sources for quotes, corroboration, and alternative angles. Produces all segment files in one pass |
 | 2 | **Full Script Editor** | Checks the entire script for structural completeness, cross-topic coherence, and consistent bias framing | Catches problems the Writer can't see — like a topic that contradicts another, or a bias that drifts halfway through. Acts as the executive editor |
 | 3 | **Full Script Writer** | Rewrites the full script based on the Editor's feedback, preserving all topic content while fixing framing and transitions | The fixer for script-wide problems. Never touches individual topics that have already passed their own audits |
@@ -130,13 +130,13 @@ The pipeline is built around seven specialized agents. Each has a single job, an
 
 The Article Researcher is the entry point. It takes your session configuration and performs a multi-phase research pipeline:
 
-1. **Bucket search**: 8 search buckets are queried via Brave Search:
-   - 3 topic-specific local buckets (`{topic} {country}`)
+1. **Bucket search**: 8 search buckets are queried via Brave Search with **source-prioritized Goggles**:
+   - 3 topic-specific local buckets (`{topic} {country}`) — boosted with **country Goggles** (`$boost=5`) built from the country's trusted news source domains
    - 2 wildcard local buckets (`news {country}`, `breaking {country}`)
-   - 3 topic-specific continent buckets (`{topic} {continent}`)
+   - 3 topic-specific continent buckets (`{topic} {continent}`) — boosted with **continent Goggles** (`$boost=3`) built from the continent's trusted news source domains
    Search terms are automatically translated into the country's primary language. The `freshness` param adjusts based on timeframe (`day`/`week`/`month`).
 
-2. **Scoring**: A lightweight LLM scores each candidate article on Impact, Prominence, Rarity, and Conflict (1–10). The gate requires average ≥7.0 with no criterion below 6.0. Up to 2 re-fetches are attempted per failing bucket.
+2. **Scoring**: A lightweight LLM scores each candidate article on Impact, Prominence, Rarity, and Conflict (1–10). The highest-scoring article per bucket is selected — there is no absolute score threshold. Rank-based selection ensures the best available article is always picked, even in low-coverage regions.
 
 3. **Fetching**: Full article text is retrieved via a **3-tier fallback chain**:
    - **Tier 1**: Jina AI Reader (`r.jina.ai/http://...`) — best quality, but rate-limits aggressively
@@ -441,10 +441,16 @@ type AgentFn = (
 
 ### News Search & Article Fetching
 
-`src/lib/newsSearch.ts` wraps the Brave Search API.
+`src/lib/newsSearch.ts` wraps the Brave Search API with **Brave Goggles** source prioritization.
 
-**`searchTopicLocal(params)`**: Searches for `"{topic} {countryName}"` with country-specific result filtering.
-**`searchTopicContinent(params)`**: Searches for `"{topic} {continentName}"` without country filtering.
+**Brave Goggles integration:**
+
+- **`buildCountryGoggles(countryCode)`**: Builds a Goggles string from the country's trusted news source domains (e.g. `$boost=5,site=lemonde.fr|$boost=5,site=lefigaro.fr|...`). Only sources with mapped domains are included.
+- **`buildContinentGoggles(continentCode)`**: Builds a Goggles string from the continent's trusted news source domains (e.g. `$boost=3,site=bbc.co.uk|$boost=3,site=reuters.com|...`).
+
+**`searchTopicLocal(params)`**: Searches for `"{topic} {countryName}"` with country-specific result filtering. If Goggles are provided, the topic search attempts use them first. If the Goggles search returns **zero results**, it automatically retries **without Goggles** for broader discovery. Internal fallback searches (e.g., generic `"{countryName} news"`) never use Goggles.
+
+**`searchTopicContinent(params)`**: Searches for `"{topic} {continentName}"` without country filtering. Same Goggles behavior as local search: tries with continent Goggles first, falls back to no-Goggles if zero results.
 
 Both use freshness filtering (`day`/`week`/`month`) and return up to 10 articles with title, description, source, URL, and published date.
 
