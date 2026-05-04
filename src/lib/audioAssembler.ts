@@ -31,17 +31,23 @@ export function stripXmlAndCues(text: string): string {
 }
 
 /**
- * Decode an MP3 ArrayBuffer using a shared AudioContext.
+ * Decode an MP3 ArrayBuffer using a fresh AudioContext.
+ * Fresh contexts avoid Chrome/Android auto-suspend issues that can hang
+ * decodeAudioData after periods of inactivity.
  */
-async function decodeMp3(audioCtx: AudioContext, arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
-  return audioCtx.decodeAudioData(arrayBuffer);
+async function decodeMp3(arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
+  const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  try {
+    return await audioCtx.decodeAudioData(arrayBuffer);
+  } finally {
+    await audioCtx.close();
+  }
 }
 
 /**
  * Fetch a music MP3 and decode it.
  */
 async function fetchMusicBuffer(
-  audioCtx: AudioContext,
   category: 'intro' | 'outro' | 'storySting' | 'blockSting',
   styleId: string
 ): Promise<AudioBuffer> {
@@ -51,42 +57,75 @@ async function fetchMusicBuffer(
     throw new Error(`Failed to fetch audio: ${url} (HTTP ${response.status})`);
   }
   const arrayBuffer = await response.arrayBuffer();
-  return decodeMp3(audioCtx, arrayBuffer);
+  return decodeMp3(arrayBuffer);
 }
 
 /**
  * Call OpenAI TTS API and decode the resulting MP3.
+ * Uses a 5-minute timeout to catch stale connections without killing
+ * legitimate slow requests. Retries once on timeout.
  */
 async function ttsToBuffer(
-  audioCtx: AudioContext,
   text: string,
   voiceId: string,
   apiKey: string,
   instructions: string
 ): Promise<AudioBuffer> {
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini-tts',
-      voice: voiceId,
-      input: text,
-      instructions,
-      response_format: 'mp3',
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const msg = errorData.error?.message || `HTTP ${response.status}`;
-    throw new Error(`TTS API error: ${msg}`);
+  try {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-tts',
+        voice: voiceId,
+        input: text,
+        instructions,
+        response_format: 'mp3',
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg = errorData.error?.message || `HTTP ${response.status}`;
+      throw new Error(`TTS API error: ${msg}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return decodeMp3(arrayBuffer);
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
 
-  const arrayBuffer = await response.arrayBuffer();
-  return decodeMp3(audioCtx, arrayBuffer);
+/**
+ * Wrapper around ttsToBuffer with one retry on timeout/abort.
+ * This handles stale HTTP connections without affecting legitimate
+ * slow TTS generations.
+ */
+async function ttsToBufferWithRetry(
+  text: string,
+  voiceId: string,
+  apiKey: string,
+  instructions: string
+): Promise<AudioBuffer> {
+  try {
+    return await ttsToBuffer(text, voiceId, apiKey, instructions);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('aborted') || msg.includes('AbortError') || msg.includes('timeout')) {
+      // Retry once after a short delay
+      await new Promise((r) => setTimeout(r, 2000));
+      return await ttsToBuffer(text, voiceId, apiKey, instructions);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -196,9 +235,6 @@ export async function producePodcast(
 
   const hasEditorial = segments.editorial && segments.editorial.trim().length > 0;
 
-  // One shared AudioContext for all MP3 decoding
-  const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-
   // One MP3 encoder for the entire podcast
   const mp3Encoder = createMp3Encoder(SAMPLE_RATE);
 
@@ -219,7 +255,7 @@ export async function producePodcast(
     // Load music
     if (musicStyleId) {
       try {
-        musicBuf = await fetchMusicBuffer(audioCtx, musicCategory, musicStyleId);
+        musicBuf = await fetchMusicBuffer(musicCategory, musicStyleId);
         onProgress(`  Music loaded (${musicBuf.duration.toFixed(1)}s)`);
       } catch (err) {
         onProgress(`  Music load failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -231,16 +267,21 @@ export async function producePodcast(
       if (exceedsTtsLimit(narrationText)) {
         const chunks = splitTextAtPeriod(narrationText, TTS_CHUNK_TARGET);
         onProgress(`Generating TTS for ${label} (${narrationText.length} chars) — split into ${chunks.length} chunks...`);
-        // Decode all chunk MP3s via shared AudioContext
+        // Decode all chunk MP3s via fresh AudioContexts
         const chunkBuffers: AudioBuffer[] = [];
         for (let i = 0; i < chunks.length; i++) {
           onProgress(`  Chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
-          const buf = await ttsToBuffer(audioCtx, chunks[i], voice.voiceId, ttsApiKey, voiceInstructions);
+          const buf = await ttsToBufferWithRetry(chunks[i], voice.voiceId, ttsApiKey, voiceInstructions);
           chunkBuffers.push(buf);
         }
         // Concatenate chunk buffers into one narration buffer
         const chunkTotalSamples = chunkBuffers.reduce((sum, b) => sum + b.length, 0);
-        narrationBuf = audioCtx.createBuffer(1, chunkTotalSamples, SAMPLE_RATE);
+        const tempCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+        try {
+          narrationBuf = tempCtx.createBuffer(1, chunkTotalSamples, SAMPLE_RATE);
+        } finally {
+          await tempCtx.close();
+        }
         let offset = 0;
         for (const buf of chunkBuffers) {
           const src = buf.getChannelData(0);
@@ -253,7 +294,7 @@ export async function producePodcast(
         onProgress(`  TTS done (${(narrationBuf.duration).toFixed(1)}s)`);
       } else {
         onProgress(`Generating TTS for ${label} (${narrationText.length} chars)...`);
-        narrationBuf = await ttsToBuffer(audioCtx, narrationText, voice.voiceId, ttsApiKey, voiceInstructions);
+        narrationBuf = await ttsToBufferWithRetry(narrationText, voice.voiceId, ttsApiKey, voiceInstructions);
         onProgress(`  TTS done (${(narrationBuf.duration).toFixed(1)}s)`);
       }
       segmentCount++;
@@ -308,9 +349,6 @@ export async function producePodcast(
   if (finalChunk.length > 0) {
     await appendAudioChunk(outputFileName, finalChunk);
   }
-
-  // Clean up shared AudioContext
-  await audioCtx.close();
 
   onProgress(`Podcast complete: ${outputFileName} (${totalDurationSeconds.toFixed(1)}s)`);
 
