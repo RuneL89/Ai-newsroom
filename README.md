@@ -151,10 +151,8 @@ The Article Researcher is the entry point. It takes your session configuration a
 
 3. **Fetching**: Full article text is retrieved via a **3-tier fallback chain**:
    - **Tier 1**: Jina AI Reader (`r.jina.ai/http://...`) — best quality, but rate-limits aggressively
-   - **Tier 2**: Direct fetch with browser headers + HTML stripping — rescues most premium sources (Guardian, BBC, AP, NYT, CNBC, Politico.eu, Spiegel, etc.)
+   - **Tier 2**: Direct fetch with browser headers + HTML stripping 
    - **Tier 3**: Brave Search description fallback — last resort, preserves at least title/source/summary
-   
-   Real-world recovery rate: **89.6%** overall (Jina alone: ~30%).
 
 4. **Selection**: Each of the 8 slots gets 1 main article (truncated to 2000 words) + 1–2 backup articles (truncated to 500 words) covering the same broad story. Backups provide quotes, corroboration, and alternative angles.
 
