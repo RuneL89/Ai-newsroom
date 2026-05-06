@@ -13,7 +13,7 @@ const defaultSingleConfig: ApiConfig = {
 
 export const defaultAppApiConfig: AppApiConfig = {
   lightweight: { ...defaultSingleConfig, model: 'gpt-4o-mini' },
-  thinking: { ...defaultSingleConfig, model: 'o3-mini' },
+  thinking: { ...defaultSingleConfig, model: 'gpt-5.5' },
 };
 
 function migrateOldConfig(parsed: Record<string, unknown>): AppApiConfig {
@@ -22,7 +22,7 @@ function migrateOldConfig(parsed: Record<string, unknown>): AppApiConfig {
   const oldApiKey = typeof parsed.apiKey === 'string' ? parsed.apiKey : '';
   const oldBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : '';
   const oldLightweight = typeof parsed.lightweightModel === 'string' ? parsed.lightweightModel : 'gpt-4o-mini';
-  const oldThinking = typeof parsed.thinkingModel === 'string' ? parsed.thinkingModel : 'o3-mini';
+  const oldThinking = typeof parsed.thinkingModel === 'string' ? parsed.thinkingModel : 'gpt-5.5';
 
   return {
     lightweight: { provider: oldProvider, apiKey: oldApiKey, baseUrl: oldBaseUrl, model: oldLightweight },

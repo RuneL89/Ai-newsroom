@@ -248,7 +248,7 @@ export function buildLlmBody(
       lowerModel.includes('reasoning')
     ) {
       // OpenAI reasoning models use `reasoning_effort`
-      body.reasoning_effort = 'medium';
+      body.reasoning_effort = 'high';
     } else {
       // Unknown model family — default to `thinking` and let adaptive retry handle it.
       body.thinking = { type: 'enabled' };
