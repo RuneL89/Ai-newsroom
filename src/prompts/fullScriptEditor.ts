@@ -55,12 +55,23 @@ The entire script must maintain ${config.editorial.biasLabel} perspective:
 - Source selection gives voice to ${config.editorial.biasLabel}-aligned sources
 - No contradictory framing from opposing perspectives (unless for contrast)
 
+## LANGUAGE REQUIREMENTS
+
+The script MUST be written in English. A script FAILS language requirements if:
+
+- The primary language is not English.
+- If the local language is not English, some words may appear in the local language, but they must always be immediately translated and explained in English.
+- Any local-language word left untranslated or unexplained causes a failure.
+
+If the script is not in English, it will be REJECTED.
+
 ## YOUR TASK
 
 1. Check structural completeness: all segments present, XML tags intact.
 2. Check cross-article coherence (transitions, progression, cross-references, tone).
 3. Check bias consistency across the full script.
-4. Return JSON (see format below).
+4. Check language: the script must be in English, with any non-English words translated and explained.
+5. Return JSON (see format below).
 
 ## OUTPUT FORMAT
 
@@ -81,7 +92,8 @@ You have exactly TWO possible outcomes:
 **APPROVED** — Use ONLY when:
 - All segments are present and XML tags are intact, AND
 - Cross-theme coherence passes (transitions, progression, cross-references, tone), AND
-- Bias consistency is clean across the full script.
+- Bias consistency is clean across the full script, AND
+- Language is English (with any non-English words translated and explained).
 
 → Set: approval_status: "APPROVED", has_feedback: false, rewriter_instructions: "All requirements passed. No changes needed."
 
@@ -91,7 +103,9 @@ You have exactly TWO possible outcomes:
 - Progression is illogical, OR
 - Cross-references are missing, OR
 - Tone is inconsistent, OR
-- Bias is inconsistent or contradictory.
+- Bias is inconsistent or contradictory, OR
+- The script is not in English, OR
+- Local-language words appear without translation or explanation.
 
 → Set: approval_status: "REJECTED", has_feedback: true, rewriter_instructions: "Specific, actionable fixes for the script-wide issues found."
 
