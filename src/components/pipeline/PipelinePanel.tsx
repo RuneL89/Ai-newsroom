@@ -6,7 +6,7 @@ import type { PipelineState, StageId, StageRecord } from '../../lib/pipelineType
 import type { SessionConfig } from '../../lib/sessionConfig';
 import StageStrip from './StageStrip';
 import StageDetail from './StageDetail';
-import { readAudioFileBinary, exportPodcastToDocuments } from '../../lib/fileManager';
+import { getPodcastPlaybackUrl, copyPodcastToDocuments } from '../../lib/fileManager';
 import { loadTestMode } from '../../lib/apiConfig';
 import { getPodcastFileName } from '../../lib/sessionConfig';
 import { Play, Square, Loader2, AlertCircle, CheckCircle2, Headphones, Pause } from 'lucide-react';
@@ -57,12 +57,10 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
       },
       onComplete: async (draft) => {
         console.log('Pipeline complete:', draft);
-        // Try to load the produced podcast
+        // Try to get a playable URL for the produced podcast
         try {
-          const bytes = await readAudioFileBinary(outputFileName);
-          if (bytes) {
-            const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'audio/mpeg' });
-            const url = URL.createObjectURL(blob);
+          const url = await getPodcastPlaybackUrl(outputFileName);
+          if (url) {
             setPodcastUrl(url);
           }
         } catch (err) {
@@ -70,7 +68,7 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
         }
         // Auto-export to Documents/Newsroom (best-effort)
         try {
-          const exported = await exportPodcastToDocuments(outputFileName);
+          const exported = await copyPodcastToDocuments(outputFileName);
           if (exported) {
             console.log('[PipelinePanel] Podcast exported to Documents/Newsroom');
           } else {
@@ -104,17 +102,15 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
         onComplete: async (draft) => {
           console.log('Pipeline complete:', draft);
           try {
-            const bytes = await readAudioFileBinary(outputFileName);
-            if (bytes) {
-              const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'audio/mpeg' });
-              const url = URL.createObjectURL(blob);
+            const url = await getPodcastPlaybackUrl(outputFileName);
+            if (url) {
               setPodcastUrl(url);
             }
           } catch (err) {
             console.error('Failed to load podcast:', err);
           }
           try {
-            const exported = await exportPodcastToDocuments(outputFileName);
+            const exported = await copyPodcastToDocuments(outputFileName);
             if (exported) {
               console.log('[PipelinePanel] Podcast exported to Documents/Newsroom');
             } else {
@@ -160,15 +156,12 @@ export default function PipelinePanel({ sessionConfig }: PipelinePanelProps) {
     setIsPlayingPodcast(false);
   }, []);
 
-  // Clean up podcast URL on unmount
+  // Clean up audio ref on unmount
   useEffect(() => {
     return () => {
-      if (podcastUrl) {
-        URL.revokeObjectURL(podcastUrl);
-      }
       audioRef.current = null;
     };
-  }, [podcastUrl]);
+  }, []);
 
   const selectedStage = state.stages.find((s) => s.id === state.selectedStageId) ||
     (state.selectedStageId === 'topicLoop'

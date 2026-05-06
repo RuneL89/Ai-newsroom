@@ -1,4 +1,5 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
 
 const BASE_DIR = 'newsroom';
 
@@ -361,28 +362,41 @@ export async function appendAudioChunk(filename: string, chunk: Uint8Array | Int
 }
 
 /**
- * Export a finished podcast from app-private storage to Documents/Newsroom.
+ * Get a playable URL for a podcast file without loading it into memory.
+ * Uses Capacitor.convertFileSrc to return a WebView-playable URL.
+ */
+export async function getPodcastPlaybackUrl(filename: string): Promise<string | null> {
+  const path = `${BASE_DIR}/${filename}`;
+  try {
+    const uriResult = await Filesystem.getUri({
+      path,
+      directory: Directory.Data,
+    });
+    return Capacitor.convertFileSrc(uriResult.uri);
+  } catch (err) {
+    console.error(`[fileManager] Failed to get podcast playback URL for ${path}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Copy a finished podcast from app-private storage to Documents/newsroom.
+ * Uses native Filesystem.copy() — no data is loaded into JS memory.
  * Returns true if the copy succeeded, false otherwise.
  */
-export async function exportPodcastToDocuments(filename: string): Promise<boolean> {
+export async function copyPodcastToDocuments(filename: string): Promise<boolean> {
   const srcPath = `${BASE_DIR}/${filename}`;
   const dstPath = `${BASE_DIR}/${filename}`;
   try {
-    // Read from app-private storage
-    const result = await Filesystem.readFile({
-      path: srcPath,
+    await Filesystem.copy({
+      from: srcPath,
+      to: dstPath,
       directory: Directory.Data,
-    });
-    // Write to Documents
-    await Filesystem.writeFile({
-      path: dstPath,
-      data: result.data as string,
-      directory: Directory.Documents,
-      recursive: true,
+      toDirectory: Directory.Documents,
     });
     return true;
   } catch (err) {
-    console.error(`[fileManager] Failed to export podcast to Documents:`, err);
+    console.error(`[fileManager] Failed to copy podcast to Documents:`, err);
     return false;
   }
 }
