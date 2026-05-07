@@ -3,7 +3,7 @@ name: Build & Deploy Web App
 on:
   push:
     branches:
-      - main
+      - Web_version
   workflow_dispatch:
 
 permissions:
