@@ -15,7 +15,7 @@ function getDB(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-async function dbGet(key: string): Promise<string | undefined> {
+async function dbGet(key: string): Promise<any> {
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
@@ -26,7 +26,7 @@ async function dbGet(key: string): Promise<string | undefined> {
   });
 }
 
-async function dbSet(key: string, value: string): Promise<void> {
+async function dbSet(key: string, value: any): Promise<void> {
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -281,7 +281,12 @@ export async function readSelectedArticles(): Promise<SelectedArticlesMap> {
 export async function writeAudioFile(filename: string, base64Data: string): Promise<void> {
   const key = makeKey(filename);
   try {
-    await dbSet(key, base64Data);
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    await dbSet(key, bytes);
   } catch (err) {
     console.error(`[fileManager] Failed to write audio ${key}:`, err);
     throw err;
@@ -295,7 +300,12 @@ export async function readAudioFile(filename: string): Promise<string> {
   const key = makeKey(filename);
   try {
     const result = await dbGet(key);
-    return result ?? '';
+    if (!result || !(result instanceof Uint8Array)) return '';
+    let binary = '';
+    for (let i = 0; i < result.length; i++) {
+      binary += String.fromCharCode(result[i]);
+    }
+    return btoa(binary);
   } catch (err) {
     console.error(`[fileManager] Failed to read audio ${key}:`, err);
     return '';
@@ -321,7 +331,7 @@ export async function audioFileExists(filename: string): Promise<boolean> {
 export async function createAudioFile(filename: string): Promise<void> {
   const key = makeKey(filename);
   try {
-    await dbSet(key, '');
+    await dbSet(key, new Uint8Array(0));
   } catch (err) {
     console.error(`[fileManager] Failed to create audio file ${key}:`, err);
     throw err;
@@ -330,23 +340,20 @@ export async function createAudioFile(filename: string): Promise<void> {
 
 /**
  * Append a binary chunk to an audio file.
- * The Uint8Array is converted to base64 for storage.
+ * Stores as Uint8Array in IndexedDB (no base64 encoding).
  */
 export async function appendAudioChunk(filename: string, chunk: Uint8Array | Int8Array): Promise<void> {
   const key = makeKey(filename);
   const bytes = chunk instanceof Int8Array
     ? new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
     : chunk;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64 = btoa(binary);
-  console.log(`[fileManager] appendAudioChunk: key=${key}, chunkSize=${bytes.length}, base64Length=${base64.length}`);
   try {
-    const existing = await dbGet(key) ?? '';
-    await dbSet(key, existing + base64);
-    console.log(`[fileManager] appendAudioChunk: key=${key}, newTotalLength=${existing.length + base64.length}`);
+    const existing = await dbGet(key);
+    const existingBytes = existing instanceof Uint8Array ? existing : new Uint8Array(0);
+    const combined = new Uint8Array(existingBytes.length + bytes.length);
+    combined.set(existingBytes);
+    combined.set(bytes, existingBytes.length);
+    await dbSet(key, combined);
   } catch (err) {
     console.error(`[fileManager] Failed to append audio chunk to ${key}:`, err);
     throw err;
@@ -360,15 +367,9 @@ export async function appendAudioChunk(filename: string, chunk: Uint8Array | Int
 export async function getPodcastPlaybackUrl(filename: string): Promise<string | null> {
   const key = makeKey(filename);
   try {
-    const base64 = await dbGet(key);
-    console.log(`[fileManager] getPodcastPlaybackUrl: key=${key}, exists=${base64 !== undefined}, length=${base64?.length ?? 0}`);
-    if (!base64) return null;
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+    const data = await dbGet(key);
+    if (!data || !(data instanceof Uint8Array) || data.length === 0) return null;
+    const blob = new Blob([data as BlobPart], { type: 'audio/mpeg' });
     return URL.createObjectURL(blob);
   } catch (err) {
     console.error(`[fileManager] Failed to get podcast playback URL for ${key}:`, err);
@@ -383,14 +384,9 @@ export async function getPodcastPlaybackUrl(filename: string): Promise<string | 
 export async function copyPodcastToDocuments(filename: string): Promise<boolean> {
   const key = makeKey(filename);
   try {
-    const base64 = await dbGet(key);
-    if (!base64) return false;
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+    const data = await dbGet(key);
+    if (!data || !(data instanceof Uint8Array) || data.length === 0) return false;
+    const blob = new Blob([data as BlobPart], { type: 'audio/mpeg' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -412,14 +408,9 @@ export async function copyPodcastToDocuments(filename: string): Promise<boolean>
 export async function readAudioFileBinary(filename: string): Promise<Uint8Array | null> {
   const key = makeKey(filename);
   try {
-    const base64 = await dbGet(key);
-    if (!base64) return null;
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
+    const data = await dbGet(key);
+    if (!data || !(data instanceof Uint8Array)) return null;
+    return data;
   } catch (err) {
     console.error(`[fileManager] Failed to read audio binary ${key}:`, err);
     return null;
