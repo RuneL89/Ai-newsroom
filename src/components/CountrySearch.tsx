@@ -7,28 +7,25 @@ import type { Country } from '../types';
 interface CountrySearchProps {
   value: Country | null;
   onChange: (country: Country) => void;
-  availableCountries?: Country[];
 }
 
-export function CountrySearch({ value, onChange, availableCountries }: CountrySearchProps) {
+export function CountrySearch({ value, onChange }: CountrySearchProps) {
   const [query, setQuery] = useState(value?.name ?? '');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const countryList = availableCountries ?? countries;
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q
-      ? countryList.filter(
+      ? countries.filter(
           c =>
             c.name.toLowerCase().includes(q) ||
             c.code.toLowerCase().includes(q)
         )
-      : [...countryList];
+      : [...countries];
     return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [query, countryList]);
+  }, [query]);
 
   const handleSelect = useCallback((country: Country) => {
     onChange(country);

@@ -3,7 +3,6 @@ export type ContinentCode = 'EU' | 'AS' | 'ME' | 'NA' | 'SA' | 'AF' | 'OC';
 export interface ContinentNewsSource {
   name: string;
   language: string;
-  domain?: string;
 }
 
 export interface Continent {
@@ -21,7 +20,7 @@ export interface Country {
   continentCode: ContinentCode;
   center: [number, number];
   zoom: number;
-  newsSources: { name: string; domain?: string }[];
+  newsSources: string[];
   language: string;
 }
 
@@ -79,18 +78,4 @@ export interface GeneratedPrompt {
     topics: Topic[];
     wordCount: number;
   };
-}
-
-export type ApiProvider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
-
-export interface ApiConfig {
-  provider: ApiProvider;
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-}
-
-export interface AppApiConfig {
-  lightweight: ApiConfig;
-  thinking: ApiConfig;
 }
