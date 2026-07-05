@@ -1,314 +1,118 @@
-# Audio Production — Generic Lessons for Agent Swarms
+# AI Newsroom — Audio Production Best Practices & Run Memory
 
-> Read this file BEFORE starting audio production in any podcast pipeline. It prevents the most common technical failures.
-
----
-
-## 1. Verify Voice Availability Before Starting
-
-**The mistake:** Hardcoding a specific voice ID (e.g., `XB0fDUnXU5powFXDhCwa`) and failing when it is not available in the execution environment.
-
-**The fix:** At the start of audio production, check what voices actually exist:
-
-```python
-# Step 0: Voice discovery
-available_voices = get_available_voices()
-english_voices = [v for v in available_voices if "en" in v.language.lower()]
-
-if PREFERRED_VOICE in [v.id for v in english_voices]:
-    voice = PREFERRED_VOICE
-elif english_voices:
-    voice = english_voices[0].id
-    log(f"Preferred voice unavailable, using: {voice}")
-else:
-    # Fallback to edge-tts or other engine
-    voice = "en-US-AriaNeural"  # edge-tts fallback
-    engine = "edge-tts"
-```
-
-**Never fail production because a voice is missing.** Log the fallback and continue.
+> Living document. Each run appends findings. Do not overwrite — add dated sections.
+> This file captures ONLY things discovered during execution that the main prompt does not cover.
+> Read this before assigning the Audio Producer agent. Current as of 2026-07-05 (Iran Weekly Review).
 
 ---
 
-## 2. Know Your Filesystem Limits
+## 2026-07-05 — Run 1: Iran Weekly Review
 
-**The mistake:** Generating a 320kbps MP3 for a 60+ minute podcast and hitting a filesystem size limit during export.
+### Voice ID XB0fDUnXU5powFXDhCwa not available
+The prompt mandates voice `XB0fDUnXU5powFXDhCwa` (Bella) for all narration. This voice ID was not present in the system. `get_available_voices()` returned only Chinese-language voices. Three alternative ElevenLabs voice IDs were also attempted — all failed.
 
-**Common limit:** The output filesystem has a per-file limit around 90-100 MB.
+**Fallback used:** `edge-tts` Python library with `en-US-AriaNeural` voice. Required `pip install edge-tts` and IPython environment restart.
 
-**Calculate safe bitrate BEFORE encoding:**
+**Lesson:** The Audio Producer must verify voice availability at the start of production and have a fallback path ready. Do not treat a missing voice as a blocking failure. Log the fallback voice used so future runs can evaluate consistency.
 
-```python
-def calculate_safe_bitrate(duration_minutes, max_file_mb=85):
-    """Calculate highest safe bitrate that stays under filesystem limit."""
-    max_bits = max_file_mb * 1024 * 1024 * 8
-    duration_seconds = duration_minutes * 60
-    max_kbps = int(max_bits / duration_seconds / 1000)
-    # Cap at 192, floor at 96, always leave margin
-    return min(192, max(96, int(max_kbps * 0.9)))
-
-# Example: 65-minute podcast
-safe_bitrate = calculate_safe_bitrate(65)  # Returns ~128
-```
-
-**Quick reference table:**
-
-| Duration | 320kbps | 192kbps | 128kbps | 96kbps |
-|----------|---------|---------|---------|--------|
-| 30 min | 72 MB | 43 MB | 29 MB | 22 MB |
-| 45 min | 108 MB | 65 MB | 43 MB | 32 MB |
-| 60 min | 144 MB | 86 MB | 58 MB | 43 MB |
-| 70 min | 161 MB | 96 MB | 64 MB | 48 MB |
-| **90 MB safe limit** | **~37 min** | **~62 min** | **~93 min** | **~124 min** |
-
-**For a typical 60-70 minute news podcast: use 128kbps.** For speech content, 128kbps is audibly identical to 192kbps. The music stings are short enough that compression artifacts in them are negligible.
+**Impact:** Minimal — edge-tts produced professional-quality narration. The pip install and restart added ~2 minutes.
 
 ---
 
-## 3. Use ffmpeg Concat for Long Podcasts
+### Filesystem per-file limit ~90 MB
+The prompt specifies 320kbps MP3 output. A 67.5-minute podcast at 320kbps = ~161 MB. Writing this file to `/mnt/agents/output/` failed with I/O error at ~100 MB. All copy methods (cp, shutil, Python chunked I/O) failed for files >90 MB.
 
-**The mistake:** Using pydub's `AudioSegment` to concatenate 25+ audio files in memory. pydub loads everything into RAM and fails with OSError for podcasts longer than ~30-40 minutes.
+**What was tried:**
+- 320kbps: I/O error
+- 192kbps: Shell timeout (120s) during ffmpeg encoding
+- 96kbps: Success (46 MB)
 
-**What works:** ffmpeg's concat demuxer. It streams files sequentially without loading them all into memory.
+**Lesson:** Calculate safe bitrate from expected duration before encoding. For this environment, a 60+ minute podcast must use 128kbps or lower. The 320kbps target is only achievable for podcasts under ~37 minutes.
 
-**The workflow:**
-
-```python
-import subprocess
-
-# Step 1: Create a filelist
-segments = [
-    "01_intro_music.mp3",
-    "02_opening_narration.mp3",
-    "03_block_sting.mp3",
-    # ... in exact play order
-]
-
-with open("filelist.txt", "w") as f:
-    for seg in segments:
-        f.write(f"file '/absolute/path/to/{seg}'\n")
-
-# Step 2: Concatenate with ffmpeg
-subprocess.run([
-    "ffmpeg", "-y",
-    "-f", "concat", "-safe", "0",
-    "-i", "filelist.txt",
-    "-acodec", "libmp3lame",
-    "-b:a", f"{safe_bitrate}k",
-    "-ar", "44100",
-    "/mnt/agents/output/final_podcast.mp3"
-], check=True, timeout=90)  # Keep under 120s shell limit
-```
-
-**Critical format for filelist.txt:**
-```
-file '/mnt/agents/output/01_intro_music.mp3'
-file '/mnt/agents/output/02_opening_narration.mp3'
-```
-Each line MUST start with `file '` and use absolute paths.
-
-**pydub is fine for:**
-- Short clips (<5 minutes total)
-- Adding fade-in/fade-out to individual files
-- Crossfading between two tracks
-
-**pydub will fail for:**
-- Full podcast assembly (>30 minutes)
-- Any operation loading 100+ MB of audio into memory
+**Formula that would have helped:** `safe_kbps = min(192, max(96, (85 * 1024 * 8) / (duration_seconds) / 1000 * 0.9))`
 
 ---
 
-## 4. Chunk TTS at Paragraph Boundaries
+### pydub fails for long podcasts
+The prompt's assembly code uses `pydub.AudioSegment` to load and concatenate all files in memory. This failed with OSError for a 67-minute podcast (~25 segments, ~160 MB uncompressed).
 
-**The mistake:** Sending a 6000-character story segment to TTS in one call and hitting length limits or getting truncated output.
+**What worked:** `ffmpeg` concat demuxer with a filelist. Streams files sequentially without loading into memory. Completed in ~30 seconds at 96kbps.
 
-**The fix:** Split long text at paragraph boundaries before TTS generation:
-
-```python
-def chunk_for_tts(text, max_chars=3500):
-    """Split text at paragraph boundaries for TTS generation."""
-    paragraphs = text.split('\n\n')
-    chunks = []
-    current = ""
-    
-    for para in paragraphs:
-        test = current + para + "\n\n" if current else para
-        if len(test) <= max_chars:
-            current = test
-        else:
-            if current:
-                chunks.append(current.strip())
-            current = para
-    
-    if current:
-        chunks.append(current.strip())
-    
-    return chunks
-```
-
-**Rules:**
-- Max 3500 characters per TTS call (stays well under limits)
-- Split at paragraph boundaries only (not mid-sentence)
-- Concatenate chunks after generation using ffmpeg (seamless at paragraph breaks)
-- A typical 6000-character story = 2 chunks
+**Lesson:** For podcasts over ~30 minutes, always use ffmpeg concat instead of pydub. pydub is fine for short clips and individual file manipulation; ffmpeg is the only reliable tool for full-episode assembly.
 
 ---
 
-## 5. Music vs. Speech Generation Tools
+### Shell 120s timeout limits ffmpeg bitrate
+The shell tool times out after 120 seconds. ffmpeg at 192kbps exceeded this (encoding + file I/O pushed it over). ffmpeg at 96kbps completed in ~30 seconds with margin to spare.
 
-**The mistake:** Using `generate_speech` with a voice ID to produce music or transition stings. Speech generation has a voice; music generation does not.
+**Lesson:** For this environment, keep ffmpeg encoding under ~90 seconds of wall time to stay within the 120s shell limit. Use `-preset ultrafast` if higher bitrate is absolutely needed.
 
-**The correct tool mapping:**
+**What does NOT work:** Background processes (`nohup`, `&`) to bypass the timeout. Multiple ffmpeg instances conflicted, corrupted files, and caused I/O errors.
 
-| Audio type | Tool | How |
-|-----------|------|-----|
-| Narration (speech) | `generate_speech` or `edge-tts` | Text + voice ID |
-| Intro/outro music | `generate_sound_effects` | Description of mood/style |
-| Transition stings | `generate_sound_effects` | Description of sound |
-| Story stings | `generate_sound_effects` | Description of sound |
+---
 
-**Prompt template for music that works:**
+### generate_sound_effects works reliably for all music
+All 9 music/sting files were generated successfully using `generate_sound_effects`:
+- 2x 8-second orchestral (intro/outro)
+- 5x 3-second brass transition stings
+- 2x 1.5-second electronic story stings
+
+No failures, no retries needed. This was the most reliable part of audio production.
+
+**Lesson:** `generate_sound_effects` is the right tool for music and stings. It is more reliable than TTS narration generation. Budget zero retry overhead for music generation.
+
+---
+
+### TTS requires paragraph-boundary chunking
+Story segments averaged 6,000+ characters. Single TTS calls for this length either truncate or fail. Each story had to be split into 2 chunks at paragraph boundaries (~3,000-3,500 chars each), generated separately, then concatenated.
+
+**Lesson:** Split narration text at paragraph boundaries, max ~3,500 characters per chunk. Concatenate after generation — the split is seamless at paragraph breaks.
+
+---
+
+### Tool availability on this environment
+
+| Tool | Status | Notes |
+|---|---|---|
+| `generate_speech` | Available but only Chinese voices | Not usable for English narration |
+| `generate_sound_effects` | Fully functional | Best tool in the environment |
+| `get_available_voices` | Works | Only lists Chinese voices |
+| `edge-tts` (Python) | Works after `pip install` | Required for English narration |
+| `pydub` (Python) | Pre-installed | Fails for large files |
+| `ffmpeg` (shell) | Pre-installed | Most reliable assembly tool |
+
+**Pre-flight for future Audio Producers:**
 ```
-"Dramatic orchestral news intro with brass fanfare and sweeping strings,
-professional broadcast quality, building to crescendo, [N] seconds"
-```
-
-**Prompt template for transition stings:**
-```
-"Classic news transition sting, brass hit with string sustain,
-professional broadcast, [N] seconds"
+1. pip install edge-tts
+2. Check available voices
+3. Calculate bitrate from expected duration
+4. Test: ffmpeg -f concat with 2 dummy files before full assembly
 ```
 
 ---
 
-## 6. Music and Narration Must Not Overlap
+### Music and narration assembly order (what actually worked)
 
-**The rule:** Music plays FIRST (alone), then FADES OUT, then narration plays SECOND (alone). Never simultaneously.
+The final 67.5-minute MP3 was assembled from 28 segments in this exact order:
 
-**Assembly order:**
 ```
-[INTRO MUSIC] -> fade out -> [OPENING NARRATION]
-[BLOCK STING] -> [HEADLINES NARRATION]
-[STORY STING] -> [STORY 1 NARRATION]
-[STORY STING] -> [STORY 2 NARRATION]
-... etc ...
-[SIGN-OFF NARRATION] -> fade out -> [OUTRO MUSIC]
+intro_music -> opening_narration -> block_sting -> headlines_narration ->
+block_sting -> transition_1 -> block_sting ->
+iran_story_1 -> story_sting -> iran_story_2 -> story_sting_alt ->
+iran_story_3 -> story_sting -> iran_story_4 -> story_sting_alt ->
+iran_story_5 ->
+block_sting -> transition_2 ->
+middleeast_story_6 -> story_sting -> middleeast_story_7 -> story_sting_alt ->
+middleeast_story_8 ->
+block_sting -> editorial_narration -> block_sting ->
+signoff_narration -> outro_music
 ```
 
-**Why:** Simultaneous music and speech sounds unprofessional and makes narration hard to understand. The podcast should feel like a BBC broadcast — clean separation between music and speech.
+**Pattern:** Music always precedes the narration it introduces. Story stings alternate between two variants to avoid sonic repetition. Block stings mark major section transitions. No overlap between music and narration — pure sequential concatenation.
 
 ---
 
-## 7. Watch the Shell Timeout
+### Positive finding: edge-tts quality
+The `en-US-AriaNeural` voice from edge-tts produced narration quality comparable to professional podcast standards. Pronunciation of Middle Eastern names and terms was acceptable. No post-processing (normalization, compression) was needed.
 
-**The constraint:** Shell tool calls time out after 120 seconds.
-
-**What this means for ffmpeg:**
-- 128kbps encoding of a 70-minute podcast: ~25-30 seconds -> SAFE
-- 192kbps encoding of a 70-minute podcast: ~40-50 seconds -> BORDERLINE
-- 320kbps encoding of a 70-minute podcast: ~60-80 seconds -> LIKELY TIMEOUT
-
-**If you need higher bitrate and are near the timeout:**
-```bash
-ffmpeg -y -f concat -safe 0 -i filelist.txt \
-  -acodec libmp3lame -b:a 192k \
-  -preset ultrafast \  # Faster encoding, slightly larger file
-  output.mp3
-```
-
-**Never use background processes** (`nohup`, `&`) to bypass the timeout. Multiple ffmpeg instances conflict, corrupt output files, and cause I/O errors. Always run ffmpeg in the foreground.
-
----
-
-## 8. Tool Availability Matrix
-
-| Tool | Purpose | Reliability | Fallback if unavailable |
-|------|---------|-------------|------------------------|
-| `generate_speech` | TTS narration | Varies by voice availability | `edge-tts` Python library |
-| `generate_sound_effects` | Music, stings | Reliable | None needed |
-| `get_available_voices` | Voice discovery | Reliable | N/A |
-| `edge-tts` (Python) | TTS narration | Reliable after `pip install` | None |
-| `pydub` (Python) | Audio manipulation | Fails for large files | `ffmpeg` concat |
-| `ffmpeg` (shell) | Audio assembly, conversion | Reliable | None |
-
-**Pre-flight checklist:**
-```python
-# Before generating ANY audio:
-1. pip install edge-tts  # Ensure fallback TTS is ready
-2. Check voice availability
-3. Calculate safe bitrate from expected duration
-4. Verify output directory exists and is writable
-5. Test ffmpeg with a 2-file concat before the full assembly
-```
-
----
-
-## 9. File Count and Assembly Order
-
-**Typical file count for a podcast with N stories:**
-
-| Category | Count | Files |
-|----------|-------|-------|
-| Music | 3 | intro, outro, block transitions (x1 or x5) |
-| Stings | 2 variants | story stings (reused between stories) |
-| Narration | 4 + N | opening, headlines, N stories, transitions, editorial, sign-off |
-| **Total** | **~15 + N** | For 8 stories: ~23 files |
-
-**The final assembly is a simple ordered list.** Write it out explicitly before calling ffmpeg:
-
-```python
-ASSEMBLY_ORDER = [
-    ("01_intro_music.mp3", "music"),
-    ("05_opening.mp3", "voice"),
-    ("03a_block_opening.mp3", "music"),
-    ("06_headlines.mp3", "voice"),
-    ("03b_block_headlines.mp3", "music"),
-    ("09_transition_1.mp3", "voice"),
-    ("03c_block_iran.mp3", "music"),
-    ("07a_story_1.mp3", "voice"),
-    ("04_story_sting.mp3", "music"),
-    ("07b_story_2.mp3", "voice"),
-    # ... continue for all stories and segments
-    ("11_signoff.mp3", "voice"),
-    ("02_outro_music.mp3", "music"),
-]
-```
-
-The "music" / "voice" tags are for documentation only — ffmpeg concat plays everything sequentially regardless. The tags help verify the pattern: music -> voice -> sting -> voice -> sting -> voice...
-
----
-
-## 10. Environment Assumptions
-
-Document these for reproducibility across different environments:
-
-| Resource | Typical Availability | Hard Limit |
-|----------|---------------------|------------|
-| RAM (IPython) | ~4 GB | pydub fails above ~2 GB |
-| Disk (output dir) | Unlimited total | **~90 MB per file** |
-| Shell timeout | 120 seconds | ffmpeg must finish in ~90s |
-| IPython timeout | 600 seconds | TTS generation has plenty of time |
-| Pre-installed Python | pydub, ffmpeg | edge-tts needs `pip install` |
-| Network | Full internet | Required for all TTS and SFX |
-
-**If running in a constrained environment:**
-- Lower bitrate to 96kbps ( halves file size)
-- Shorten music stings to 2-3 seconds
-- Use fewer story sting variants (1 instead of 2)
-- These changes have minimal quality impact on speech-heavy content
-
----
-
-## Quick Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| "Voice not found" | ElevenLabs voice unavailable | Check available voices, fallback to edge-tts |
-| "I/O error" on export | File exceeds ~90MB | Reduce bitrate to 128kbps or lower |
-| "Transport endpoint not connected" | Filesystem disconnect | Retry, or use lower bitrate |
-| pydub OSError | Out of memory | Use ffmpeg concat instead |
-| Shell timeout (120s) | ffmpeg too slow | Lower bitrate or add `-preset ultrafast` |
-| TTS output truncated | Text too long | Split at paragraph boundaries, max 3500 chars |
-| ffmpeg concat fails | Wrong filelist format | Use `file '/absolute/path.mp3'` format |
-| Multiple ffmpeg errors | Background processes | `pkill ffmpeg`, run single foreground process |
-| Music overlaps narration | Wrong assembly order | Music file always BEFORE its narration |
+**Recommendation for future runs:** `en-US-AriaNeural` via edge-tts is a reliable default when ElevenLabs voices are unavailable. No quality degradation observed.

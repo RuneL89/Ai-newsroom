@@ -1,225 +1,82 @@
-# Editor Workflow — Generic Lessons for Agent Swarms
+# AI Newsroom — Editorial Best Practices & Run Memory
 
-> Read this file at the START of any newsroom podcast pipeline. These lessons prevent the most common rejection reasons that cause iteration loops.
-
----
-
-## 1. Frontload the Sentence Length Constraint
-
-**The mistake:** Putting the "60% of sentences must be 15-30 words" rule only in the Editor checklist. By the time the Editor sees the draft, the entire script has wrong sentence lengths and needs a full rewrite.
-
-**The fix:** The Researcher/First-Draft Writer MUST enforce this WHILE writing. Add this to the Writer's prompt:
-
-```
-SENTENCE LENGTH RULE (non-negotiable):
-- 65-75% of sentences must be 15-30 words
-- Average sentence length must exceed 15 words
-- While writing: if a sentence exceeds 30 words, split it
-- While writing: if a sentence is under 15 words, merge it with the next
-  using: and, but, while, as, which, although
-- Target 70% in range — this builds a buffer above the 60% minimum
-```
-
-**Why 65-75% and not exactly 60%:** The Editor check is binary — pass or fail. Aiming for 70% means a few edge-case sentences won't push you below the threshold. We saw a script oscillate: 0% pass -> overcorrect to 100% short sentences -> combine back up. Targeting the middle band prevents this.
+> Living document. Each run appends findings. Do not overwrite — add dated sections.
+> This file captures ONLY things discovered during execution that the main prompt does not cover.
+> Read this before assigning the Editor agent. Current as of 2026-07-05 (Iran Weekly Review).
 
 ---
 
-## 2. Mechanical Edit Artifact Cleanup
+## 2026-07-05 — Run 1: Iran Weekly Review
 
-**The mistake:** When a Writer fixes sentence-length issues by mechanically combining short sentences, artifacts appear that the Editor will catch and reject.
+### Sentence-length oscillation
+The prompt requires "60% of sentences 15-30 words." The Writer's first draft had 0% of stories passing (sentences too long, 30-50 words). The fix overcorrected to nearly all sentences under 15 words (9.9%-52% in range). A second mechanical-combine pass was needed to land in the 62-86% range.
 
-**Common artifacts to hunt for after any mechanical sentence edit:**
+**Lesson:** Instruct the Writer to target 70% in the 15-30 word range — not the minimum 60%. This prevents overcorrection.
 
-| Artifact | Example | Fix |
-|----------|---------|-----|
-| Double conjunction | `, and However,` | `. However,` |
-| Double conjunction | `, and But` | `. But` |
-| Triple conjunction | `, and And yet` | `. And yet` |
-| Run-on >35 words | Two unrelated ideas jammed together | Split at the natural logical break |
-| Sentence fragment | Starts with lowercase after combining | Capitalize or restructure |
-
-**The fix:** Any mechanical edit pass MUST be followed by a cleanup scan. Add to the Writer prompt:
-
-```
-AFTER combining sentences, scan for and fix:
-1. Any ", and [Capitalized word]" -> replace with ". [Capitalized word]"
-2. Any sentence over 30 words -> split at natural break
-3. Any sentence under 15 words -> expand or re-merge
-4. Read combined sentences aloud — if they sound awkward, rewrite
-```
+**Impact:** Cost us one full extra Editor-Writer loop (Iteration 8-9).
 
 ---
 
-## 3. Fact Recovery: Verify Before Replacing
+### Mechanical combining produces artifacts
+When the Writer fixed the short-sentence problem by mechanically merging adjacent sentences, the Editor found 6 artifacts: `, and However,` `, and But` `, and And yet` and similar double-conjunction patterns across Stories 3, 6, 8 and the Editorial.
 
-**The mistake:** When the Fact Checker grades a story "FAILED," the Fact Recovery agent's first instinct is to search for a replacement story. But the failure might just mean the initial search didn't find the sources — not that the story is fabricated.
+**Lesson:** Any sentence-combining fix must include an explicit cleanup pass that scans for `, and [Capitalized transition word]` and replaces with `. [Word]`.
 
-**The fix:** Change the Fact Recovery priority order:
-
-```
-FACT RECOVERY PRIORITY (strict order):
-1. FIRST: Run targeted verification searches using EXACT quotes,
-   different source combinations, and narrower date ranges
-2. If 2+ corroborating sources found -> Update grade to FULLY CORRECT
-3. If 1 corroborating source found -> Update grade to PARTIALLY CORRECT
-4. ONLY IF zero sources found after deep search -> Replace the story
-```
-
-**Why this matters:** A replaced story means the Writer must rewrite a segment, the Editor must re-check it, and the Fact Checker must re-verify it. That's 3 extra iterations. Verifying in place costs 1 iteration.
+**Impact:** Minor — Editor caught and described them, Writer fixed inline. But without the Editor looking for this specifically, they would have shipped.
 
 ---
 
-## 4. Zero-Knowledge Self-Check
+### "Fact Check Failed" does not mean "fabricated"
+The Fact Checker graded Story 7 (Syria cafe bombing) as FAILED after finding zero sources. The Fact Recovery Specialist found 9 confirming sources on deeper search using different terms and sources. The story was verified; the initial search simply didn't hit the right sources.
 
-**The mistake:** Assuming the Writer will naturally define all terms for an international audience. Even experienced agents miss terms that seem obvious to them (organization names, political titles, regional acronyms).
+**Lesson:** When Fact Checker reports FAILED, the Fact Recovery agent should ALWAYS attempt deeper targeted verification (exact quotes, different source combinations) BEFORE treating it as a replacement candidate. The prompt currently jumps to replacement too quickly.
 
-**The fix:** Add an explicit self-check step to the Writer prompt:
-
-```
-BEFORE submitting the draft, run this self-check on EVERY story:
-1. Highlight every proper noun (person, place, organization)
-2. Highlight every acronym or abbreviation
-3. Highlight every political term or concept
-4. Highlight every historical reference
-5. Verify EACH ONE has a parenthetical definition on first mention
-6. If any are undefined, add: "TERM (DEFINITION)" on first use
-```
-
-**Common terms that get missed:**
-- Memorandum names ("the Cairo Agreement" -> what is it?)
-- Political titles ("the Supreme Leader" -> of which country? what does it mean?)
-- Geographic features ("the Strait" -> which strait? why does it matter?)
-- Organization acronyms ("the IRGC" -> what does it stand for? what does it do?)
+**Impact:** If we had replaced Story 7 immediately, we would have lost a verified story and added 2-3 extra iterations for the replacement to be written, edited, and checked.
 
 ---
 
-## 5. Country Attribution Rules
+### Editor final check can reject even after Fact Checker passes
+The workflow diagram shows: Fact Checker -> (conditional recovery) -> Editor -> Audio. The Editor's final check on the v2 script (after Fact Checker had passed all stories) STILL rejected it for sentence-length distribution going the other direction.
 
-**Simple rules that get broken:**
-
-```
-MANDATORY (checked by Editor, rejection if violated):
-- Every story in the Continent block MUST start with "In [COUNTRY], ..."
-- [COUNTRY] must be an actual country or widely recognized territory
-- Gaza Strip -> "In the Palestinian territories, ..."
-- West Bank -> "In the Palestinian territories, ..."
-- Do NOT put Country stories in the Continent block
-- Do NOT put Continent stories that lack a Continent-specific angle
-```
+**Lesson:** The Fact Checker verifies facts; the Editor verifies craft. Passing one does not guarantee passing the other. The Editor's final check is a hard gate that can reject for reasons completely unrelated to fact-checking. Do not assume a script that passed fact-checking is automatically cleared for audio.
 
 ---
 
-## 6. Bias Verification Checklist
+### Specific corrections from this run (for pattern recognition)
 
-**The mistake:** Telling the Editor to "check if the Moderate perspective was applied" is too vague. The Editor needs concrete, checkable items.
+| What was wrong | What it was corrected to | Category |
+|---|---|---|
+| Date "June 28th" for $6B funds announcement | "June 29th" | Factual date error |
+| "Ayatollah Shubairi Zanjani" | "Ayatollah Hashem Hosseini Bushehri, chairman of the Society of Seminary Teachers of Qom" | Name + title wrong |
+| Death toll "at least six" in Damascus cafe | "at least nine" | Undercount |
+| Missing: foiled bus bomb July 3 Al-Wurud | Added paragraph | Missing related event |
+| Israeli control "approximately 60 percent" | "approximately 70 percent" | Understatement |
+| Missing: "According to Gaza Government Media Office" before breakdown figures | Added attribution | Missing source attribution |
 
-**Generic checklist (adapt adjectives for your selected bias):**
-
-```
-BIAS VERIFICATION CHECKLIST:
-- [ ] Headlines use neutral/factual language, not loaded terms
-- [ ] Story order prioritizes newsworthiness over political angle
-- [ ] Attribution phrases used: "according to X," "officials stated," "reports indicate"
-- [ ] Both/all sides of contentious issues are quoted
-- [ ] No judgment adjectives outside direct quotes ("brutal," "heroic," "oppressive")
-- [ ] Editorial segment has HIGHER intensity than news segments
-- [ ] No section suddenly reads like a different bias was applied
-```
+**Pattern:** Errors cluster around specific numbers (dates, death tolls, percentages) and proper names/titles. Fact Recovery should prioritize these claim types when a story grades PARTIALLY CORRECT.
 
 ---
 
-## 7. Editorial Segment Structure
+### Writer tends to overcorrect wholesale
+When given a fix instruction, the Writer applies it to the entire script rather than surgically. Sentence splitting hit every story. Sentence combining hit every story. Both passes were global when they should have been targeted.
 
-**The mistake:** The editorial reads like another news story instead of an analytical conclusion.
-
-**The fix:** Enforce this structure in the Writer prompt:
-
-```
-EDITORIAL SEGMENT — REQUIRED STRUCTURE:
-<!-- HOOK: 2-3 sentences referencing 2-3 specific stories from this broadcast -->
-<!-- ANALYSIS: 60% of segment — connect themes, identify patterns across blocks -->
-<!-- PERSPECTIVE: 30% — explicitly state the [BIAS] viewpoint -->
-<!-- CLOSING: 10% — memorable final thought, natural transition to sign-off -->
-
-RULES:
-- Minimum 2500 characters
-- Sentence length: 65-75% in 15-30 word range
-- Intensity must be NOTICEABLY higher than news segments
-- Must reference specific stories (not generic observations)
-- Must provide analytical closure, not just summary
-```
+**Lesson:** Fix instructions to the Writer should specify WHICH segments to touch and WHICH to leave alone. "Fix Stories 2, 3, 4, 5, 6, 8 and Editorial only. Stories 1 and 7 passed — do not touch them."
 
 ---
 
-## 8. The Hard Gate Before Audio
+### Iteration count for this run
 
-**This is non-negotiable.** The Editor's final check is the last quality gate before expensive audio production. The rule:
+| Iteration | Agent | Action | Trigger |
+|---|---|---|---|
+| 1 | Writer | First draft | Initial |
+| 2 | Editor | Phase 1 REJECT | 3 issues (length, undefined term, attribution) |
+| 3 | Writer | Phase 2 + fixes | Editor rejection |
+| 4 | Fact Checker | Full verification | Workflow step |
+| 5 | Fact Recovery | Deep re-research | Story 7 "FAILED" + Stories 4, 8 partial |
+| 6 | Writer | Apply corrections | Fact Recovery findings |
+| 7 | Fact Checker | Re-verify 3 stories | Corrections applied |
+| 8 | Editor | Final check REJECT | Sentence length too short (overcorrection) |
+| 9 | Writer | Mechanical edit | Editor rejection |
+| 10 | Editor | Final check PASS | Cleared for audio |
 
-```
-NEVER skip the final Editor check.
-NEVER generate audio for a script that hasn't passed Editor final review.
-If the Editor rejects, fix and re-submit. Audio generation is the REWARD for passing.
-```
-
-**Why:** Audio generation involves 20+ TTS calls, sound effect generation, and ffmpeg assembly. That's hundreds of tool calls. Fixing a script and regenerating audio costs 3-5x more iterations than fixing before audio.
-
-**The loop structure:**
-```
-Writer -> Editor (REJECT) -> Writer (fix) -> Editor (PASS) -> Audio
-```
-Not:
-```
-Writer -> Editor (skip) -> Audio (generate) -> Editor (check, REJECT) -> Audio (regenerate)
-```
-
----
-
-## 9. Editor Rejection Criteria (Complete List)
-
-These are the ONLY reasons the Editor should reject a script. All are checkable:
-
-```
-AUTOMATIC REJECTION (no exceptions):
-- [ ] Any story under 1500 characters
-- [ ] Any story with <60% of sentences in 15-30 word range
-- [ ] Any story with average sentence length <15 words
-- [ ] Any undefined term, acronym, organization, or political concept
-- [ ] Any story missing Who, What, When, Where, Why, How
-- [ ] Any story assuming prior knowledge of local affairs
-- [ ] Any Country story in the Continent block
-- [ ] Any Continent story lacking a Continent-specific angle
-- [ ] Any Continent story not starting with "In [COUNTRY], ..."
-- [ ] Editorial under 2500 characters
-- [ ] Editorial with same or lower bias intensity than news segments
-- [ ] Bias inconsistency (different sections read like different biases)
-- [ ] Mechanical edit artifacts (", and However," etc.)
-```
-
----
-
-## 10. Expected Iteration Count
-
-**With these lessons applied, expect:**
-- **5-6 total agent iterations** (vs. 9 without fixes)
-- **1 Editor rejection at most** (vs. 2 without fixes)
-- **0 audio regenerations** (final check catches everything)
-
-**Iteration breakdown:**
-```
-1. Writer (first draft, with constraints) ->
-2. Editor (Phase 1, likely PASSES) ->
-3. Fact Checker (verification) ->
-   [Optional: Fact Recovery if issues found] ->
-4. Editor (Final Check, PASSES) ->
-5. Audio Producer (generates final MP3)
-```
-
-**Without these lessons:**
-```
-Writer -> Editor (REJECT, length) -> Writer (fix) ->
-Fact Checker (ISSUES) -> Fact Recovery -> Writer (fix) ->
-Fact Checker (re-verify) -> Editor (Final, REJECT, length) ->
-Writer (fix) -> Editor (PASS) -> Audio Producer
-```
-
-The difference: 5 iterations vs. 9+. Apply these lessons.
+**Total: 10 agent iterations.** Target for future runs with these lessons applied: 5-6.
