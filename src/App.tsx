@@ -208,6 +208,77 @@ Never invent facts. Never omit relevant facts.
 
 ## AGENT SWARM ARCHITECTURE
 
+### SHARED MECHANICAL VALIDATION SUBROUTINE (CODE-ONLY — ZERO LLM COST)
+
+All mechanical checks (character counts and sentence-length distribution) MUST be performed by the Python function below. NEVER use an LLM to count characters, words, or sentences — that wastes tokens and is unreliable.
+
+Run this subroutine on every story segment BEFORE any LLM-based qualitative audit. If mechanical_pass is False, REJECT the segment immediately and return it to the Writer with the exact failure data. Do not spend LLM tokens on qualitative review until mechanical checks pass.
+
+\`\`\`python
+def validate_mechanical(text: str, min_chars: int = 1500) -> dict:
+    """
+    CODE-ONLY mechanical validation. Run this BEFORE any LLM-based qualitative audit.
+    Counts characters and sentences using pure Python. NEVER use an LLM for counting.
+    Returns exact numbers and a single mechanical_pass verdict.
+    """
+    import re
+
+    result = {
+        "mechanical_pass": False,
+        "length": {
+            "pass": False,
+            "actual": len(text),
+            "required": min_chars,
+        },
+        "sentence_structure": {
+            "pass": False,
+            "avg_words": 0.0,
+            "percent_in_range": 0.0,
+            "sentences_analyzed": 0,
+            "sentences_in_range": 0,
+        },
+    }
+
+    # Length check
+    result["length"]["pass"] = result["length"]["actual"] >= min_chars
+
+    # Sentence structure check: split on .!? and count words per sentence
+    sentences = [s.strip() for s in re.split(r"[.!?]+", text) if s.strip()]
+    word_counts = [len(s.split()) for s in sentences]
+
+    if word_counts:
+        avg_words = sum(word_counts) / len(word_counts)
+        in_range = sum(1 for c in word_counts if 15 <= c <= 30)
+        percent_in_range = (in_range / len(word_counts)) * 100
+        sentence_pass = percent_in_range >= 60 and avg_words > 15
+    else:
+        avg_words = 0.0
+        in_range = 0
+        percent_in_range = 0.0
+        sentence_pass = False
+
+    result["sentence_structure"] = {
+        "pass": sentence_pass,
+        "avg_words": round(avg_words, 1),
+        "percent_in_range": round(percent_in_range, 1),
+        "sentences_analyzed": len(word_counts),
+        "sentences_in_range": in_range,
+    }
+
+    result["mechanical_pass"] = result["length"]["pass"] and result["sentence_structure"]["pass"]
+    return result
+
+
+# Example usage for every story segment
+for story_id, story_text in story_segments.items():
+    audit = validate_mechanical(story_text)
+    if not audit["mechanical_pass"]:
+        print(f"{story_id}: MECHANICAL FAIL", audit)
+        # REJECT immediately; do NOT run LLM qualitative audit
+    else:
+        print(f"{story_id}: MECHANICAL PASS — proceed to qualitative audit")
+\`\`\`
+
 ### AGENT 1: NEWS RESEARCHER & FIRST DRAFT WRITER
 **Role**: Investigative Researcher + Initial Script Writer
 **Tools**: web_search, llm_generate
@@ -400,6 +471,9 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT REQUIREMENTS:**
 
 **EDITOR COMPLETENESS AUDIT - REJECT IF ANY REQUIREMENT FAILS:**
 
+**STEP 0 — MECHANICAL VALIDATION (CODE-ONLY):**
+Before any LLM-based audit, run the shared validate_mechanical() subroutine on every story. If mechanical_pass is False, REJECT immediately using the exact counts returned. Do not waste tokens on qualitative review of mechanically failing stories.
+
 - **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
 - **REJECT IF <60% OF SENTENCES ARE 15-30 WORDS**: At least 60% of sentences must be 15-30 words.
 - **REJECT IF AVERAGE SENTENCE LENGTH <15 WORDS**: Average sentence length must be >15 words.
@@ -502,6 +576,7 @@ ${config.includeEditorialSegment ? `**EDITORIAL SEGMENT POLISH:**
 - Music cues preserved: [PASS/FAIL]
 - Country attribution verified: [PASS/FAIL]
 - ${biasLabel} framing consistent: [PASS/FAIL]
+- Mechanical validation (code-only): [PASS/FAIL] — Length ≥1500 chars; 60%+ sentences 15-30 words; avg >15 words
 \`\`\`
 
 ---
@@ -759,6 +834,9 @@ final_audio.export("/mnt/okcomputer/output/${outputFilename}",
 
 **CRITICAL FINAL APPROVAL GATE:**
 6. **Agent 2** (Editor - FINAL CHECK) → **MUST VERIFY ALL REQUIREMENTS BEFORE AUDIO - ALL MANDATORY, NO EXCEPTIONS:**
+
+   **STEP 0 — RUN MECHANICAL VALIDATION SUBROUTINE (CODE-ONLY):**
+   Execute validate_mechanical() on every story segment. If mechanical_pass is False, REJECT immediately with the exact failure data. Do not use LLM tokens for counting.
 
    **REJECT IF UNDER 1500 CHARS**: Any story under 1500 characters is AUTOMATICALLY REJECTED. Return to Writer for mandatory expansion.
    

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build:web": "tsc -p tsconfig.ghpages.json && GH_PAGES=true vite build",
+    "build:ghpages": "npm run build:web",
+    "preview": "vite preview",
+    "preview:web": "vite preview --outDir dist"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",

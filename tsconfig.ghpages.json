@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/components/BiasSelector.tsx",
+    "src/components/CountryMap.tsx",
+    "src/components/CountrySearch.tsx",
+    "src/data/**/*",
+    "src/lib/utils.ts",
+    "src/types.ts",
+    "src/types/**/*"
+  ]
+}
