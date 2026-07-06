@@ -12,7 +12,7 @@ function App() {
   const [sessionContext, setSessionContext] = useState<SessionConfig | null>(null);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
+    <div className="min-h-[100dvh] bg-slate-950 text-slate-200">
       <Toaster position="top-right" theme="dark" />
       <ScreenTabs activeScreen={activeScreen} onChange={setActiveScreen} />
       {activeScreen === 'newsroom' && <NewsroomScreen sessionContext={sessionContext} onSessionContextChange={setSessionContext} />}
